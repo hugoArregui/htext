@@ -3,9 +3,10 @@
 #include <unistd.h>
 #include <dlfcn.h>
 #include <errno.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_keycode.h>
-#include <SDL2/SDL_render.h>
+#include <SDL.h>
+// #include <SDL_keycode.h>
+// #include <SDL_render.h>
+#include <SDL_ttf.h>
 #include "main.h"
 
 #define DEBUG_FPS 1
@@ -15,10 +16,12 @@ int
 getGameLastModificationDate(const char* path, struct stat* fileStat, time_t* modificationTime)
 {
   if (stat(path, fileStat) == 0)
-{
+  {
     *modificationTime = fileStat->st_mtime;
     return 0;
-  } else {
+  }
+  else
+  {
     printf("failed to get file last modification time %s", strerror(errno));
     return -1;
   }
@@ -31,12 +34,14 @@ loadGameCode(const char* sourcePath, Code* code)
   code->updateAndRender = 0;
 
   if (code->handler)
-{
+  {
     code->updateAndRender = (update_and_render *) dlsym(code->handler, "UpdateAndRender");
-  } else {
+  }
+  else
+  {
     char *errstr = dlerror();
     if (errstr != NULL)
-{
+    {
       printf("A dynamic linking error occurred: (%s)\n", errstr);
     }
   }
@@ -47,12 +52,12 @@ loadGameCode(const char* sourcePath, Code* code)
 void
 unloadGameCode(Code* code)
 {
-    if (code->handler)
-{
-        dlclose(code->handler);
-        code->handler = 0;
-    }
-    code->isValid = false;
+  if (code->handler)
+  {
+    dlclose(code->handler);
+    code->handler = 0;
+  }
+  code->isValid = false;
 }
 
 int
@@ -93,6 +98,11 @@ main()
     return -1;
   }
 
+  if (TTF_Init() < 0)
+  {
+    printf("Error initializing SDL_ttf: %s\n", TTF_GetError());
+  }
+
   SDL_Window* window = SDL_CreateWindow("Play",
                                         SDL_WINDOWPOS_UNDEFINED,
                                         SDL_WINDOWPOS_UNDEFINED,
@@ -117,21 +127,21 @@ main()
     return -1;
   }
 
-  SdlOffscreenBuffer globalBackBuffer;
-  globalBackBuffer.bytesPerPixel = BITMAP_BYTES_PER_PIXEL;
-  globalBackBuffer.pitch = align16(width * globalBackBuffer.bytesPerPixel);
-  globalBackBuffer.width = width;
-  globalBackBuffer.height = height;
+  // SdlOffscreenBuffer globalBackBuffer;
+  // globalBackBuffer.bytesPerPixel = BITMAP_BYTES_PER_PIXEL;
+  // globalBackBuffer.pitch = align16(width * globalBackBuffer.bytesPerPixel);
+  // globalBackBuffer.width = width;
+  // globalBackBuffer.height = height;
 
-  int bitmapMemorySize = globalBackBuffer.pitch*globalBackBuffer.height;
-  globalBackBuffer.memory = mmap(0, bitmapMemorySize, PROT_READ | PROT_WRITE,
-                                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  // int bitmapMemorySize = globalBackBuffer.pitch*globalBackBuffer.height;
+  // globalBackBuffer.memory = mmap(0, bitmapMemorySize, PROT_READ | PROT_WRITE,
+  //                                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 
-  if (globalBackBuffer.memory == MAP_FAILED)
-  {
-    printf("cannot allocate GlobalBackbuffer memory\n");
-    return -1;
-  }
+  // if (globalBackBuffer.memory == MAP_FAILED)
+  // {
+  //   printf("cannot allocate GlobalBackbuffer memory\n");
+  //   return -1;
+  // }
 
 
   int monitorRefreshHz = 60;
@@ -219,20 +229,49 @@ main()
 
     if (code.isValid)
     {
-      SdlOffscreenBuffer buffer = {};
-      buffer.memory = ((uint8*)globalBackBuffer.memory) + (globalBackBuffer.height - 1) * globalBackBuffer.pitch;
-      buffer.width = globalBackBuffer.width;
-      buffer.height = globalBackBuffer.height;
-      buffer.pitch = -globalBackBuffer.pitch;
-      code.updateAndRender(&memory, &input, &buffer);
 
-      SDL_UpdateTexture(texture, 0, globalBackBuffer.memory, globalBackBuffer.pitch);
 
-      int offsetX = 0;
-      int offsetY = 0;
-      SDL_Rect srcRect = {0, 0, buffer.width, buffer.height};
-      SDL_Rect destRect = {offsetX, offsetY, buffer.width, buffer.height};
-      SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
+
+  TTF_Font* font = TTF_OpenFont("font.ttf", 24);
+  if ( !font ) {
+    printf("Failed to load font: %s\n", TTF_GetError());
+  }
+// Set color to black
+  SDL_Color color = { 0, 0, 0 };
+
+  SDL_Surface* text_surf = TTF_RenderText_Solid( font, "Hello World!", color );
+  if ( !text_surf ) {
+    printf("Failed to render text: %s\n", TTF_GetError());
+  }
+
+	SDL_Texture*text = SDL_CreateTextureFromSurface(renderer, text_surf);
+
+	SDL_Rect dest;
+  dest.x = 320 - (text_surf->w / 2.0f);
+  dest.y = 240;
+  dest.w = text_surf->w;
+  dest.h = text_surf->h;
+  SDL_RenderCopy(renderer, text, NULL, &dest);
+
+
+      // SdlOffscreenBuffer buffer = {};
+      // buffer.memory = ((uint8*)globalBackBuffer.memory) + (globalBackBuffer.height - 1) * globalBackBuffer.pitch;
+      // buffer.width = globalBackBuffer.width;
+      // buffer.height = globalBackBuffer.height;
+      // buffer.pitch = -globalBackBuffer.pitch;
+      // code.updateAndRender(&memory, &input, &buffer);
+
+      // SDL_UpdateTexture(texture, 0, globalBackBuffer.memory, globalBackBuffer.pitch);
+
+      // int offsetX = 0;
+      // int offsetY = 0;
+      // SDL_Rect srcRect = {0, 0, buffer.width, buffer.height};
+      // SDL_Rect destRect = {offsetX, offsetY, buffer.width, buffer.height};
+      // SDL_RenderCopy(renderer, texture, &srcRect, &destRect);
+
+
+      // code.updateAndRender(&memory, &input, &buffer);
+
       SDL_RenderPresent(renderer);
     }
 

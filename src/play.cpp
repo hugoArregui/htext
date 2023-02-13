@@ -1,5 +1,7 @@
 #include "main.h"
 #include "play.h"
+// #include <SDL2/SDL.h>
+// #include <SDL2/SDL_ttf.h>
 
 // #define MODE_FUNCTION(name) void name(State* state)
 // typedef UPDATE_AND_RENDER(ModeFunction);
@@ -71,6 +73,9 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
 
   if(!gameState->isInitialized)
   {
+
+
+
     gameState->isInitialized = true;
   }
 
@@ -91,53 +96,54 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
     printf("RELOAD\n");
   }
 
-  Bitmap drawBuffer = {};
-  drawBuffer.width  = safeTruncateToUint16(backBuffer->width);
-  drawBuffer.height = safeTruncateToUint16(backBuffer->height);
-  drawBuffer.pitch  = safeTruncateToInt16(backBuffer->pitch);
-  drawBuffer.memory = backBuffer->memory;
 
-  v4 color = {0, 1, 0, 0};
+  // Bitmap drawBuffer = {};
+  // drawBuffer.width  = safeTruncateToUint16(backBuffer->width);
+  // drawBuffer.height = safeTruncateToUint16(backBuffer->height);
+  // drawBuffer.pitch  = safeTruncateToInt16(backBuffer->pitch);
+  // drawBuffer.memory = backBuffer->memory;
 
-  uint32 color32 = ((roundReal32ToUInt32(color.a * 255.0f) << 24) |
-                    (roundReal32ToUInt32(color.r * 255.0f) << 16) |
-                    (roundReal32ToUInt32(color.g * 255.0f) << 8)  |
-                    (roundReal32ToUInt32(color.b * 255.0f) << 0));
+  // v4 color = {0, 1, 0, 0};
 
-  uint8* row = (uint8*) backBuffer->memory;
+  // uint32 color32 = ((roundReal32ToUInt32(color.a * 255.0f) << 24) |
+  //                   (roundReal32ToUInt32(color.r * 255.0f) << 16) |
+  //                   (roundReal32ToUInt32(color.g * 255.0f) << 8)  |
+  //                   (roundReal32ToUInt32(color.b * 255.0f) << 0));
 
-  for (int y = 0;
-       y < drawBuffer.height;
-       ++y)
-  {
-    uint32* pixel = (uint32*) row;
-    for (int x = 0;
-         x < drawBuffer.width;
-         ++x)
-    {
-      *pixel = color32;
-      ++pixel;
-    }
+  // uint8* row = (uint8*) backBuffer->memory;
 
-    row += drawBuffer.pitch;
-  }
+  // for (int y = 0;
+  //      y < drawBuffer.height;
+  //      ++y)
+  // {
+  //   uint32* pixel = (uint32*) row;
+  //   for (int x = 0;
+  //        x < drawBuffer.width;
+  //        ++x)
+  //   {
+  //     *pixel = color32;
+  //     ++pixel;
+  //   }
 
-    Font *debugFont = loadFont("/usr/share/fonts/TTF/Vera.ttf", 'z' - '!');
+  //   row += drawBuffer.pitch;
+  // }
+
+  //   Font *debugFont = loadFont("/usr/share/fonts/TTF/Vera.ttf", 'z' - '!');
 
 
-    int w = 20;
-    int h = 20;
+  //   int w = 20;
+  //   int h = 20;
 
-    int codepoint = 'a';
-    uint8* bitmap = stbtt_GetCodepointBitmap(&debugFont->handle, 0,stbtt_ScaleForPixelHeight(&debugFont->handle, drawBuffer.height), codepoint, &w, &h, 0,0);
+  //   int codepoint = 'a';
+  //   uint8* bitmap = stbtt_GetCodepointBitmap(&debugFont->handle, 0,stbtt_ScaleForPixelHeight(&debugFont->handle, drawBuffer.height), codepoint, &w, &h, 0,0);
 
-   for (int j=0; j < h; ++j)
-   {
-      for (int i=0; i < w; ++i)
-      {
-        ((uint8*)drawBuffer.memory)[j*w+i] = bitmap[j*w+i];
-      }
-   }
+  //  for (int j=0; j < h; ++j)
+  //  {
+  //     for (int i=0; i < w; ++i)
+  //     {
+  //       ((uint8*)drawBuffer.memory)[j*w+i] = bitmap[j*w+i];
+  //     }
+  //  }
 
     // debugFont->handle
 

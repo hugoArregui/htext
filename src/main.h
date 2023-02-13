@@ -1,3 +1,4 @@
+#include <SDL2/SDL_render.h>
 #ifndef __PLAY_MAIN
 
 #include <fcntl.h>
@@ -136,7 +137,7 @@ struct Input
 /*     }; */
 };
 
-#define UPDATE_AND_RENDER(name) void name(Memory *memory, Input* input, SdlOffscreenBuffer* backBuffer)
+#define UPDATE_AND_RENDER(name) void name(Memory *memory, Input* input, SDL_Renderer* renderer)
 typedef UPDATE_AND_RENDER(update_and_render);
 
 struct Code
