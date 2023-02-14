@@ -7,8 +7,8 @@ SDL2_LIBS = -lrt `pkg-config --libs sdl2 SDL2_ttf SDL2_image`
 
 build: clean
 	mkdir -p build/
-	clang++ -fPIC $(FLAGS) -shared src/play.cpp -o build/play.so $(SDL2_LIBS)
-	clang++ $(FLAGS) $(DEBUG) -o build/play src/main.cpp $(SDL2_LIBS)
+	clang++ -fPIC $(FLAGS) -shared src/play_app.cpp -o build/play.so $(SDL2_LIBS)
+	clang++ $(FLAGS) $(DEBUG) -o build/play src/play_platform.cpp $(SDL2_LIBS)
 
 clean:
 	rm -f build/*

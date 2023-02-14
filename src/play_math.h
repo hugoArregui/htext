@@ -2,7 +2,7 @@
 
 #include <cmath>
 #include <climits>
-#include "main.h"
+#include "play_platform.h"
 
 union v2
 {
