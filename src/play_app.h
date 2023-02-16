@@ -165,11 +165,5 @@ struct State
   TTF_Font* font;
 };
 
-struct EntireFile
-{
-  uint32 contentsSize;
-  void *contents;
-};
-
 #define __PLAY_PLAY
 #endif

@@ -160,8 +160,8 @@ main()
 
   uint32 targetFrameDurationMs = targetSecondsPerFrame * 1000;
   bool running = 1;
-  SDL_Event event;
 
+  SDL_StartTextInput();
   while (running)
   {
     uint32 frameStartMs = SDL_GetTicks();
@@ -185,31 +185,6 @@ main()
       }
     }
 #endif
-
-
-    while (SDL_PollEvent(&event))
-    {
-      switch (event.type)
-      {
-      case SDL_KEYDOWN:
-        input.keypressed = event.key.keysym.sym;
-        printf("keypressed %d %d %d\n", input.keypressed, SDLK_COLON, SDLK_RETURN);
-        // if (keypressed == SDLK_ESCAPE)
-        // {
-        //   running = 0;
-        //   break;
-        // }
-        break;
-      case SDL_TEXTINPUT:
-        strcpy(input.text, event.text.text);
-        break;
-      case SDL_QUIT: /* if mouse click to close window */
-        running = 0;
-        break;
-      case SDL_KEYUP:
-        break;
-      }
-    }
 
     if (code.isValid)
     {
