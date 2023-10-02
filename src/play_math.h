@@ -94,13 +94,12 @@ V2(real32 x, real32 y)
 inline v3
 V3(real32 x, real32 y, real32 z)
 {
-    v3 result;
-
-    result.x = x;
-    result.y = y;
-    result.z = z;
-
-    return result;
+    // https://gcc.gnu.org/onlinedocs/gcc/Designated-Inits.html
+    return v3 {
+      .x = x,
+      .y = y,
+      .z = z
+    };
 }
 
 inline v3
@@ -118,14 +117,12 @@ V3(v2 xy, real32 z)
 inline v4
 V4(real32 x, real32 y, real32 z, real32 w)
 {
-    v4 result;
-
-    result.x = x;
-    result.y = y;
-    result.z = z;
-    result.w = w;
-
-    return result;
+    return v4 {
+      .x = x,
+      .y = y,
+      .z = z,
+      .w = w
+    };
 }
 
 struct Rectangle2
@@ -157,11 +154,11 @@ clamp(real32 min, real32 value, real32 max)
 {
     real32 result = value;
 
-    if(result < min)
+    if (result < min)
     {
         result = min;
     }
-    else if(result > max)
+    else if (result > max)
     {
         result = max;
     }
@@ -173,7 +170,6 @@ inline real32
 clamp01(real32 value)
 {
     real32 result = clamp(0.0f, value, 1.0f);
-
     return result;
 }
 
