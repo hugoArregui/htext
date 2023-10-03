@@ -2,14 +2,23 @@
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_scancode.h>
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 
 const char* normalModeName = "NORMAL";
 const char* exModeName = "EX";
 const char* insertModeName = "INSERT";
 
-extern "C" UPDATE_AND_RENDER(UpdateAndRender)
+void sttfcc(int code)
+{
+  if (code < 0)
+  {
+    printf("Error : %s\n", TTF_GetError());
+    exit(1);
+  }
+}
+
+extern UPDATE_AND_RENDER(UpdateAndRender)
 {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
@@ -31,12 +40,12 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
     // TODO: how are we going to handle this?
-    state->text = (char*)pushSize(&state->arena, 1000);
+    state->text = (char*)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
 
     // TODO: how are we going to handle this?
-    state->exText = (char*)pushSize(&state->arena, 1000);
+    state->exText = (char*)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
 
-    state->isInitialized = true;
+    state->isInitialized = TRUE;
   }
 
   //NOTE(casey): Transient initialization
@@ -48,7 +57,7 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
                     memory->transientStorageSize - sizeof(TransientState),
                     (uint8*) memory->transientStorage + sizeof(TransientState));
 
-    transientState->isInitialized = true;
+    transientState->isInitialized = TRUE;
   }
 
   if (input->executableReloaded)
@@ -71,7 +80,7 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
         {
           state->mode = AppMode_normal;
 
-          if (strcmp(state->exText, "quit") == 0)
+          if (strcmp(state->exText, "quit") == 0 || strcmp(state->exText, "q") == 0)
           {
             return 1;
           }
@@ -118,7 +127,7 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
         }
         break;
       default:
-        assert(false);
+        assert(FALSE);
         break;
       }
       break;
@@ -146,7 +155,7 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
         strcat(state->text, event.text.text);
         break;
       default:
-        assert(false);
+        assert(FALSE);
         break;
       }
       break;
@@ -169,9 +178,9 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
   }
   case AppMode_ex: {
     modeName = exModeName;
-    SDL_Color color = { 0, 0, 0 };
+    SDL_Color color = { 0, 0, 0, 0 };
 
-    char* fText = (char*)pushSize(&transientState->arena, strlen(state->exText) + 3);
+    char* fText = (char*)pushSize(&transientState->arena, strlen(state->exText) + 3, DEFAULT_ALIGMENT);
     if (count >= 80)
     {
       count = 0;
@@ -203,14 +212,14 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
     break;
   }
   default:
-    assert(false);
+    assert(FALSE);
     break;
   }
 
   // render text
   if (strlen(state->text) > 0)
   {
-    SDL_Color color = { 0, 0, 0 };
+    SDL_Color color = { 0, 0, 0, 0 };
 
     SDL_Surface* text_surf = TTF_RenderText_Solid(state->font, state->text, color);
     if (!text_surf)
@@ -231,10 +240,21 @@ extern "C" UPDATE_AND_RENDER(UpdateAndRender)
     SDL_FreeSurface(text_surf);
   }
 
+  // Render status separator
+  {
+    SDL_SetRenderDrawColor(buffer->renderer, 0, 0, 0, 0);
+    int h;
+    int w;
+    sttfcc(TTF_SizeUTF8(state->font, "test", &w, &h));
+
+    int y = buffer->height - h * 2;
+    SDL_RenderDrawLine(buffer->renderer, 0, y, buffer->width, y);
+  }
+
 
   // render mode name
   {
-    SDL_Color color = { 255, 0, 0 };
+    SDL_Color color = { 255, 0, 0, 0 };
     SDL_Surface* text_surf = TTF_RenderText_Solid(state->font, modeName, color);
     if (!text_surf)
     {

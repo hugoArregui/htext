@@ -10,6 +10,9 @@
 #include <unistd.h>
 #include <dirent.h>
 
+#define TRUE 1
+#define FALSE 0
+
 typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
@@ -41,18 +44,18 @@ typedef double real64;
 #define Gigabytes(Value) (Megabytes(Value)*1024LL)
 #define Terabytes(Value) (Gigabytes(Value)*1024LL)
 
-struct PlatformState
+typedef struct PlatformState
 {
   uint64 totalSize;
   void *gameMemoryBlock;
-};
+} PlatformState;
 
-struct SdlOffscreenBuffer
+typedef struct SdlOffscreenBuffer
 {
   SDL_Renderer* renderer;
   int width;
   int height;
-};
+} SdlOffscreenBuffer;
 
 typedef struct Memory
 {
@@ -63,19 +66,19 @@ typedef struct Memory
   void *transientStorage; // NOTE(casey): REQUIRED to be cleared to zero at startup
 } Memory;
 
-struct Input
+typedef struct Input
 {
   real32 dtForFrame;
   bool32 executableReloaded;
   int keypressed;
 
   char text[32];
-};
+} Input;
 
 #define UPDATE_AND_RENDER(name) int name(Memory *memory, Input* input, SdlOffscreenBuffer* buffer)
 typedef UPDATE_AND_RENDER(update_and_render);
 
-struct Code
+typedef struct Code
 {
     void* handler;
     // IMPORTANT(casey): Either of the callbacks can be 0!  You must
@@ -83,7 +86,7 @@ struct Code
     update_and_render *updateAndRender;
 
     bool32 isValid;
-};
+} Code;
 
 inline uint16
 safeTruncateToUint16(int32 value)

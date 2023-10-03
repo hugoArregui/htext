@@ -60,11 +60,11 @@ unloadGameCode(Code* code)
     dlclose(code->handler);
     code->handler = 0;
   }
-  code->isValid = false;
+  code->isValid = FALSE;
 }
 
 int
-main()
+main(void)
 {
   const char* libSourcePath = "/home/hugo/workspace/play/build/play.so";
 
@@ -159,7 +159,7 @@ main()
   }
 
   uint32 targetFrameDurationMs = targetSecondsPerFrame * 1000;
-  bool running = 1;
+  int running = 1;
 
   SDL_StartTextInput();
   while (running)
@@ -168,7 +168,7 @@ main()
 
 #if DEBUG
     time_t modificationTime;
-    input.executableReloaded = false;
+    input.executableReloaded = FALSE;
     if (getGameLastModificationDate(libSourcePath,
                                     &fileStat,
                                     &modificationTime) == 0)
@@ -178,7 +178,7 @@ main()
         lastModificationTime = modificationTime;
       } else if (lastModificationTime != modificationTime || !code.isValid)
       {
-        input.executableReloaded = true;
+        input.executableReloaded = TRUE;
         unloadGameCode(&code);
         loadGameCode(libSourcePath, &code);
         lastModificationTime = modificationTime;

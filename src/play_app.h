@@ -5,34 +5,25 @@
 #include "play_math.h"
 #include "play_platform.h"
 
-struct MemoryArena
+typedef struct MemoryArena
 {
   memory_index size;
   uint8 *base;
   memory_index used;
   int32 tempCount;
-};
+} MemoryArena;
 
-struct TemporaryMemory
+typedef struct TemporaryMemory
 {
   memory_index used;
   MemoryArena* arena;
-};
+} TemporaryMemory;
 
-struct TaskWithMemory
-{
-  bool32 beingUsed;
-  MemoryArena arena;
-  TemporaryMemory memoryFlush;
-};
-
-struct TransientState;
-
-struct TransientState
+typedef struct TransientState
 {
   bool32 isInitialized;
   MemoryArena arena;
-};
+} TransientState;
 
 static void
 initializeArena(MemoryArena *arena, memory_index size, void *base)
@@ -58,18 +49,20 @@ getAlignmentOffset(MemoryArena *arena, size_t alignment)
   return alignmentOffset;
 }
 
-inline memory_index
-getArenaRemainingSize(MemoryArena* arena, memory_index alignment=4)
+inline static memory_index
+getArenaRemainingSize(MemoryArena* arena)
 {
+  memory_index alignment = 4;
   size_t alignmentOffset = getAlignmentOffset(arena, alignment);
   return arena->size - arena->used - alignmentOffset;
 }
 
-#define pushStruct(arena, type, ...) (type *)pushSize_(arena, sizeof(type), ##__VA_ARGS__)
-#define pushArray(arena, count, type, ...) (type *)pushSize_(arena, (count)*sizeof(type), ##__VA_ARGS__)
-#define pushSize(arena, size, ...) pushSize_(arena, size, ##__VA_ARGS__)
+#define pushStruct(arena, type, aligment) (type *)pushSize(arena, sizeof(type), aligment)
+#define pushArray(arena, count, type, aligment) (type *)pushSize(arena, (count)*sizeof(type), aligment)
+
+#define DEFAULT_ALIGMENT 4
 void *
-pushSize_(MemoryArena *arena, size_t size, size_t alignment=4)
+pushSize(MemoryArena *arena, size_t size, size_t alignment)
 {
   size_t originalSize = size;
   size_t alignmentOffset = getAlignmentOffset(arena, alignment);
@@ -88,7 +81,7 @@ inline char*
 pushString(MemoryArena *arena, char* source)
 {
   uint32 size = strlen(source) + 1;
-  char* dest = (char*)pushSize(arena, size);
+  char* dest = (char*)pushSize(arena, size, DEFAULT_ALIGMENT);
   for (uint32 charIndex = 0;
        charIndex < size;
        ++charIndex)
@@ -98,14 +91,15 @@ pushString(MemoryArena *arena, char* source)
   return dest;
 }
 
-static void
-subArena(MemoryArena *result, MemoryArena *arena, size_t size, size_t alignment=16)
-{
-  result->size = size;
-  result->base = (uint8*)pushSize(arena, size, alignment);
-  result->used = 0;
-  result->tempCount = 0;
-}
+#define ARENA_DEFAULT_ALIGMENT 16
+/* static void */
+/* subArena(MemoryArena *result, MemoryArena *arena, size_t size, size_t alignment) */
+/* { */
+/*   result->size = size; */
+/*   result->base = (uint8*)pushSize(arena, size, alignment); */
+/*   result->used = 0; */
+/*   result->tempCount = 0; */
+/* } */
 
 #define zeroStruct(instance) zeroSize(sizeof(instance), &(instance))
 inline void
@@ -152,10 +146,10 @@ enum AppMode
   AppMode_insert
 };
 
-struct State
+typedef struct State
 {
-  bool32 isInitialized;
-  AppMode mode;
+  int isInitialized;
+  enum AppMode mode;
 
   MemoryArena arena;
 
@@ -163,7 +157,7 @@ struct State
   char* exText;
 
   TTF_Font* font;
-};
+} State;
 
 #define __PLAY_PLAY
 #endif
