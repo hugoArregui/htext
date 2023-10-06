@@ -1,5 +1,6 @@
 #include <SDL2/SDL_render.h>
 #ifndef __PLAY_MAIN
+#define __PLAY_MAIN
 
 #include <assert.h>
 #include <dirent.h>
@@ -41,6 +42,8 @@ typedef double real64;
 #define Gigabytes(Value) (Megabytes(Value) * 1024LL)
 #define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
+#define DEBUG_WINDOW 1
+
 typedef struct PlatformState {
   uint64 totalSize;
   void *gameMemoryBlock;
@@ -48,6 +51,10 @@ typedef struct PlatformState {
 
 typedef struct SdlOffscreenBuffer {
   SDL_Renderer *renderer;
+#ifdef DEBUG_WINDOW
+  SDL_Renderer *debugRenderer;
+#endif
+
   int width;
   int height;
 } SdlOffscreenBuffer;
@@ -107,5 +114,4 @@ inline int16 safeTruncateToInt16(int32 value) {
   return result;
 }
 
-#define __PLAY_MAIN
 #endif

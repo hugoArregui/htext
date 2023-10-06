@@ -1,4 +1,5 @@
 #include "play_app.h"
+#include "play_la.h"
 #include "play_sdl.h"
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
@@ -24,6 +25,13 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   uint32 cursorColor = fontColor | 0x9F;
   SDL_Color sdlModeColor = {UNHEX(0xFF000000)};
   SDL_Color sdlFontColor = {UNHEX(fontColor)};
+
+#if DEBUG_WINDOW
+  uint32 debugBackgroundColor = 0xFFFFFFFF;
+  uint32 debugFontColor = 0x00000000;
+  SDL_SetRenderDrawColor(buffer->debugRenderer, UNHEX(debugBackgroundColor));
+  SDL_RenderClear(buffer->debugRenderer);
+#endif
 
   SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(backgroundColor)));
   SDL_ccode(SDL_RenderClear(buffer->renderer));
@@ -127,12 +135,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           } else if (event.text.text[x] == 'i') {
             state->mode = AppMode_insert;
           } else if (event.text.text[x] == 'h') {
-            printf("here\n");
             if (state->cursor_position > 0) {
               state->cursor_position--;
             }
           } else if (event.text.text[x] == 'l') {
-            printf("here\n");
             if (state->cursor_position < (strlen(state->text) - 1)) {
               state->cursor_position++;
             }
@@ -203,6 +209,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   int x = margin_x;
   int y = margin_y;
+
+  unsigned long cursor_ix = state->cursor_position; // TODO naming
+  V2i cursor_pos = {-1, -1};
+
   // render text
   SDL_Rect dest;
   for (unsigned long i = 0; i < strlen(state->text); ++i) {
@@ -211,6 +221,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     if (ch == '\n') {
       y += font_h;
       x = margin_x;
+      cursor_ix++;
       continue;
     }
 
@@ -226,23 +237,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.h = glyph_surface->h;
     SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
 
-    {
-      // render cursor
-      if (i == state->cursor_position) {
-        dest.x = x;
-        dest.y = y;
-        dest.w = font_w;
-        dest.h = font_h;
-
-        SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
-        SDL_ccode(
-            SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
-        if (state->mode != AppMode_ex) {
-          SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
-        } else {
-          SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
-        }
-      }
+    if (i == cursor_ix) {
+      cursor_pos.x = x;
+      cursor_pos.y = y;
     }
 
     SDL_DestroyTexture(text);
@@ -251,21 +248,19 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   {
-    // render cursor (if cursor is outside of the text)
-    if (state->cursor_position >= strlen(state->text)) {
-      dest.x = x;
-      dest.y = y;
-      dest.w = font_w;
-      dest.h = font_h;
+    // render cursor
+    dest.x = cursor_pos.x == -1 ? x : cursor_pos.x;
+    dest.y = cursor_pos.y == -1 ? y : cursor_pos.y;
+    dest.w = font_w;
+    dest.h = font_h;
 
-      SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
-      SDL_ccode(
-          SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
-      if (state->mode != AppMode_ex) {
-        SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
-      } else {
-        SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
-      }
+    SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
+    SDL_ccode(
+        SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
+    if (state->mode != AppMode_ex) {
+      SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+    } else {
+      SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
     }
   }
 
@@ -287,6 +282,30 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     SDL_DestroyTexture(text);
     SDL_FreeSurface(text_surf);
   }
+
+#if DEBUG_WINDOW
+  {
+    char *text =
+        (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
+    SDL_Color color = {UNHEX(debugFontColor)};
+    sprintf(text, "cursor position: %lu", state->cursor_position);
+    SDL_Surface *text_surface =
+        TTF_cpointer(TTF_RenderText_Solid(state->font, text, color));
+
+    SDL_Texture *text_texture = SDL_cpointer(
+        SDL_CreateTextureFromSurface(buffer->debugRenderer, text_surface));
+
+    SDL_Rect dest;
+    dest.x = 0;
+    dest.y = 0;
+    dest.w = text_surface->w;
+    dest.h = text_surface->h;
+    SDL_ccode(SDL_RenderCopy(buffer->debugRenderer, text_texture, NULL, &dest));
+
+    SDL_DestroyTexture(text_texture);
+    SDL_FreeSurface(text_surface);
+  }
+#endif
 
   return 0;
 }

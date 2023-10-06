@@ -1,17 +1,19 @@
 #include "play_platform.h"
+#include "play_sdl.h"
 #include <SDL.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL_keycode.h>
 #include <SDL_ttf.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <stdbool.h>
 
 #define DEBUG_FPS 0
 #define DEBUG 1
+#define DEBUG_WINDOW 1
 #define DEBUG_LOAD 0
 
 int getGameLastModificationDate(const char *path, struct stat *fileStat,
@@ -81,32 +83,24 @@ int main(void) {
   int width = 1920;
   int height = 1080;
 
-  if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-    printf("SDL could not initialize: %s\n", SDL_GetError());
-    return -1;
-  }
+  SDL_ccode(SDL_Init(SDL_INIT_VIDEO));
 
-  if (TTF_Init() < 0) {
-    printf("Error initializing SDL_ttf: %s\n", TTF_GetError());
-  }
+  TTF_ccode(TTF_Init());
 
-  SDL_Window *window =
+  SDL_Window *window = SDL_cpointer(
       SDL_CreateWindow("Play", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                       width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
-  if (window == NULL) {
-    printf("Window could not be created! SDL_Error: %s\n", SDL_GetError());
-    return -1;
-  }
+                       width, height, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE));
   SDL_Renderer *renderer =
       SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
 
-  SDL_Texture *texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-                        SDL_TEXTUREACCESS_STREAMING, width, height);
-  if (texture == NULL) {
-    printf("cannot create texture: %s\n ", SDL_GetError());
-    return -1;
-  }
+#if DEBUG_WINDOW
+  SDL_Window *debugWindow = SDL_cpointer(
+      SDL_CreateWindow("Play debug", width - width * 0.3, height - height * 0.3,
+                       100, 100, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE));
+
+  SDL_Renderer *debugRenderer = SDL_cpointer(
+      SDL_CreateRenderer(debugWindow, -1, SDL_RENDERER_PRESENTVSYNC));
+#endif
 
   int monitorRefreshHz = 60;
   SDL_DisplayMode mode;
@@ -157,11 +151,13 @@ int main(void) {
 #endif
 
     if (code.isValid) {
-      SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-      SDL_RenderClear(renderer);
-
       SdlOffscreenBuffer buffer = {};
       buffer.renderer = renderer;
+
+#if DEBUG_WINDOW
+      buffer.debugRenderer = debugRenderer;
+#endif
+
       SDL_GetWindowSize(window, &buffer.width, &buffer.height);
 
       if (code.updateAndRender(&memory, &input, &buffer) == 1) {
@@ -172,6 +168,10 @@ int main(void) {
       input.text[0] = '\0';
 
       SDL_RenderPresent(renderer);
+
+#if DEBUG_WINDOW
+      SDL_RenderPresent(debugRenderer);
+#endif
     }
 
     uint32 frameDurationMs = SDL_GetTicks() - frameStartMs;
@@ -198,6 +198,10 @@ int main(void) {
   unloadGameCode(&code);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
+#if DEBUG_WINDOW
+  SDL_DestroyRenderer(debugRenderer);
+  SDL_DestroyWindow(debugWindow);
+#endif
   SDL_Quit();
 
   munmap(platformState.gameMemoryBlock, platformState.totalSize);
