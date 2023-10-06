@@ -88,10 +88,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           if (strcmp(state->exText, "quit") == 0 ||
               strcmp(state->exText, "q") == 0) {
             return 1;
-          }
-          if (strcmp(state->exText, "debug") == 0) {
-            printf("cursor position %lu\n", state->cursor_position);
-            printf("text length: %lu\n", strlen(state->text));
           } else {
             printf("invalid command %s\n", state->exText);
           }
@@ -163,7 +159,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
   }
 
-  // render
+  // -------- rendering
+  const int font_h = TTF_FontHeight(state->font);
   const char *modeName = NULL;
   switch (state->mode) {
   case AppMode_normal: {
@@ -172,7 +169,99 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
   case AppMode_ex: {
     modeName = exModeName;
+    break;
+  }
+  case AppMode_insert: {
+    modeName = insertModeName;
+    break;
+  }
+  default:
+    assert(false);
+    break;
+  }
 
+  {
+    const int font_w = font_h / 2;
+
+    const int margin_x = buffer->width * 0.01;
+    const int margin_y = buffer->height * 0.01;
+
+    int x = margin_x;
+    int y = margin_y;
+
+    unsigned long cursor_ix = state->cursor_position; // TODO naming
+    V2i cursor_pos = {-1, -1};
+
+    GlyphRenderer glyphRenderer;
+    SDL_Rect dest;
+
+    // render text
+    for (unsigned long i = 0; i < strlen(state->text); ++i) {
+      uint32 ch = state->text[i];
+
+      if (ch == '\n') {
+        y += font_h;
+        x = margin_x;
+        cursor_ix++;
+        continue;
+      }
+
+      createGlyphRenderer(&glyphRenderer, buffer->renderer, state->font, ch,
+                          sdlFontColor);
+
+      dest.x = x;
+      dest.y = y;
+      dest.w = glyphRenderer.surface->w;
+      dest.h = glyphRenderer.surface->h;
+
+      if (i == cursor_ix) {
+        cursor_pos.x = x;
+        cursor_pos.y = y;
+      }
+
+      renderAndDestroyGlyph(&glyphRenderer, &dest);
+      x += dest.w;
+    }
+
+    {
+      // render cursor
+      SDL_Rect dest;
+      dest.x = cursor_pos.x == -1 ? x : cursor_pos.x;
+      dest.y = cursor_pos.y == -1 ? y : cursor_pos.y;
+      dest.w = font_w;
+      dest.h = font_h;
+
+      SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
+      SDL_ccode(
+          SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
+      if (state->mode != AppMode_ex) {
+        SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+      } else {
+        SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
+      }
+    }
+
+    // render mode name
+    {
+      SDL_Surface *text_surf = TTF_cpointer(
+          TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
+
+      SDL_Texture *text = SDL_cpointer(
+          SDL_CreateTextureFromSurface(buffer->renderer, text_surf));
+
+      SDL_Rect dest;
+      dest.x = buffer->width - text_surf->w - 0.01 * buffer->width;
+      dest.y = 0;
+      dest.w = text_surf->w;
+      dest.h = text_surf->h;
+      SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
+
+      SDL_DestroyTexture(text);
+      SDL_FreeSurface(text_surf);
+    }
+  }
+
+  if (state->mode == AppMode_ex) {
     char *fText = (char *)pushSize(&transientState->arena,
                                    strlen(state->exText) + 1, DEFAULT_ALIGMENT);
     sprintf(fText, ":%s", state->exText);
@@ -191,96 +280,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     SDL_DestroyTexture(text);
     SDL_FreeSurface(text_surf);
-    break;
-  }
-  case AppMode_insert: {
-    modeName = insertModeName;
-    break;
-  }
-  default:
-    assert(false);
-    break;
-  }
-  const int font_h = TTF_FontHeight(state->font);
-  const int font_w = font_h / 2;
-
-  const int margin_x = buffer->width * 0.01;
-  const int margin_y = buffer->height * 0.01;
-
-  int x = margin_x;
-  int y = margin_y;
-
-  unsigned long cursor_ix = state->cursor_position; // TODO naming
-  V2i cursor_pos = {-1, -1};
-
-  // render text
-  SDL_Rect dest;
-  for (unsigned long i = 0; i < strlen(state->text); ++i) {
-    uint32 ch = state->text[i];
-
-    if (ch == '\n') {
-      y += font_h;
-      x = margin_x;
-      cursor_ix++;
-      continue;
-    }
-
-    SDL_Surface *glyph_surface =
-        TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-
-    SDL_Texture *text = SDL_cpointer(
-        SDL_CreateTextureFromSurface(buffer->renderer, glyph_surface));
-
-    dest.x = x;
-    dest.y = y;
-    dest.w = glyph_surface->w;
-    dest.h = glyph_surface->h;
-    SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
-
-    if (i == cursor_ix) {
-      cursor_pos.x = x;
-      cursor_pos.y = y;
-    }
-
-    SDL_DestroyTexture(text);
-    SDL_FreeSurface(glyph_surface);
-    x += dest.w;
-  }
-
-  {
-    // render cursor
-    dest.x = cursor_pos.x == -1 ? x : cursor_pos.x;
-    dest.y = cursor_pos.y == -1 ? y : cursor_pos.y;
-    dest.w = font_w;
-    dest.h = font_h;
-
-    SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
-    SDL_ccode(
-        SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
-    if (state->mode != AppMode_ex) {
-      SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
-    } else {
-      SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
-    }
-  }
-
-  // render mode name
-  {
-    SDL_Surface *text_surf =
-        TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
-
-    SDL_Texture *text =
-        SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, text_surf));
-
-    SDL_Rect dest;
-    dest.x = buffer->width - text_surf->w - 0.01 * buffer->width;
-    dest.y = 0;
-    dest.w = text_surf->w;
-    dest.h = text_surf->h;
-    SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
-
-    SDL_DestroyTexture(text);
-    SDL_FreeSurface(text_surf);
   }
 
 #if DEBUG_WINDOW
@@ -288,22 +287,37 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     char *text =
         (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
     SDL_Color color = {UNHEX(debugFontColor)};
-    sprintf(text, "cursor position: %lu", state->cursor_position);
-    SDL_Surface *text_surface =
-        TTF_cpointer(TTF_RenderText_Solid(state->font, text, color));
+    sprintf(text, "Cursor position: %lu\nText length: %lu",
+            state->cursor_position, strlen(state->text));
 
-    SDL_Texture *text_texture = SDL_cpointer(
-        SDL_CreateTextureFromSurface(buffer->debugRenderer, text_surface));
+    const int margin_x = buffer->width * 0.01;
+    const int margin_y = buffer->height * 0.01;
 
-    SDL_Rect dest;
-    dest.x = 0;
-    dest.y = 0;
-    dest.w = text_surface->w;
-    dest.h = text_surface->h;
-    SDL_ccode(SDL_RenderCopy(buffer->debugRenderer, text_texture, NULL, &dest));
+    int x = margin_x;
+    int y = margin_y;
 
-    SDL_DestroyTexture(text_texture);
-    SDL_FreeSurface(text_surface);
+    GlyphRenderer glyphRenderer;
+    for (unsigned long i = 0; i < strlen(text); ++i) {
+      uint32 ch = text[i];
+
+      if (ch == '\n') {
+        y += font_h;
+        x = margin_x;
+        continue;
+      }
+
+      createGlyphRenderer(&glyphRenderer, buffer->debugRenderer, state->font,
+                          ch, color);
+
+      SDL_Rect dest;
+      dest.x = x;
+      dest.y = y;
+      dest.w = glyphRenderer.surface->w;
+      dest.h = glyphRenderer.surface->h;
+
+      renderAndDestroyGlyph(&glyphRenderer, &dest);
+      x += dest.w;
+    }
   }
 #endif
 

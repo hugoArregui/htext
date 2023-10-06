@@ -13,7 +13,6 @@
 
 #define DEBUG_FPS 0
 #define DEBUG 1
-#define DEBUG_WINDOW 1
 #define DEBUG_LOAD 0
 
 int getGameLastModificationDate(const char *path, struct stat *fileStat,

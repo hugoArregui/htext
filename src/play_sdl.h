@@ -35,24 +35,29 @@ void *SDL_cpointer(void *p) {
   return p;
 }
 
-void renderText(SDL_Renderer *renderer, TTF_Font *font, char *text,
-                SDL_Color color, int x, int y) {
+typedef struct GlyphRenderer {
+  SDL_Renderer *renderer;
+  SDL_Surface *surface;
+  SDL_Texture *texture;
+} GlyphRenderer;
 
-  SDL_Surface *text_surface =
-      TTF_cpointer(TTF_RenderText_Solid(font, text, color));
+void createGlyphRenderer(GlyphRenderer *glyphRenderer, SDL_Renderer *renderer,
+                         TTF_Font *font, unsigned short ch, SDL_Color color) {
 
-  SDL_Texture *text_texture =
-      SDL_cpointer(SDL_CreateTextureFromSurface(renderer, text_surface));
+  SDL_Surface *surface = TTF_cpointer(TTF_RenderGlyph_Solid(font, ch, color));
 
-  SDL_Rect dest;
-  dest.x = x;
-  dest.y = y;
-  dest.w = text_surface->w;
-  dest.h = text_surface->h;
-  SDL_ccode(SDL_RenderCopy(renderer, text_texture, NULL, &dest));
+  SDL_Texture *texture =
+      SDL_cpointer(SDL_CreateTextureFromSurface(renderer, surface));
 
-  SDL_DestroyTexture(text_texture);
-  SDL_FreeSurface(text_surface);
+  glyphRenderer->renderer = renderer;
+  glyphRenderer->surface = surface;
+  glyphRenderer->texture = texture;
+}
+
+void renderAndDestroyGlyph(GlyphRenderer *glyph, SDL_Rect *dest) {
+  SDL_ccode(SDL_RenderCopy(glyph->renderer, glyph->texture, NULL, dest));
+  SDL_DestroyTexture(glyph->texture);
+  SDL_FreeSurface(glyph->surface);
 }
 
 #endif
