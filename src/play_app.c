@@ -1,150 +1,141 @@
 #include "play_app.h"
+#include "play_sdl.h"
+#include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_rect.h>
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
+#include <SDL2/SDL_ttf.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
 
-const char* normalModeName = "NORMAL";
-const char* exModeName = "EX";
-const char* insertModeName = "INSERT";
+const char *normalModeName = "NORMAL";
+const char *exModeName = "EX";
+const char *insertModeName = "INSERT";
 
-void sttfcc(int code)
-{
-  if (code < 0)
-  {
-    printf("Error : %s\n", TTF_GetError());
-    exit(1);
-  }
-}
-
-extern UPDATE_AND_RENDER(UpdateAndRender)
-{
+extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
+
+  uint32 backgroundColor = 0x00000000;
+  uint32 fontColor = 0xFFFFFF00;
+  uint32 cursorColor = fontColor | 0x9F;
+  SDL_Color sdlModeColor = {UNHEX(0xFF000000)};
+  SDL_Color sdlFontColor = {UNHEX(fontColor)};
+
+  SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(backgroundColor)));
+  SDL_ccode(SDL_RenderClear(buffer->renderer));
 
   State *state = (State *)memory->permanentStorage;
 
-  if(!state->isInitialized)
-  {
+  if (!state->isInitialized) {
     state->mode = AppMode_normal;
 
     // NOTE: this is executed once
-    state->font = TTF_OpenFont("/usr/share/fonts/TTF/Vera.ttf", 24);
-    if (!state->font)
-    {
-      printf("Failed to load font: %s\n", TTF_GetError());
-    }
+    state->font = TTF_cpointer(
+        TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
 
-    initializeArena(&state->arena,
-                    memory->permanentStorageSize - sizeof(State),
+    initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
     // TODO: how are we going to handle this?
-    state->text = (char*)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->text = (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->text[0] = '\0';
 
     // TODO: how are we going to handle this?
-    state->exText = (char*)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->exText = (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->text[0] = '\0';
 
-    state->isInitialized = TRUE;
+    state->isInitialized = true;
   }
 
-  //NOTE(casey): Transient initialization
+  // NOTE(casey): Transient initialization
   assert(sizeof(TransientState) <= memory->transientStorageSize);
   TransientState *transientState = (TransientState *)memory->transientStorage;
-  if (!transientState->isInitialized)
-  {
+  if (!transientState->isInitialized) {
     initializeArena(&transientState->arena,
                     memory->transientStorageSize - sizeof(TransientState),
-                    (uint8*) memory->transientStorage + sizeof(TransientState));
+                    (uint8 *)memory->transientStorage + sizeof(TransientState));
 
-    transientState->isInitialized = TRUE;
+    transientState->isInitialized = true;
   }
 
-  if (input->executableReloaded)
-  {
+  if (input->executableReloaded) {
     printf("RELOAD\n");
   }
 
   SDL_Event event;
-  while (SDL_PollEvent(&event))
-  {
-    switch (event.type)
-    {
+  while (SDL_PollEvent(&event)) {
+    switch (event.type) {
     case SDL_KEYDOWN:
-      switch (state->mode)
-      {
+      switch (state->mode) {
       case AppMode_normal:
         break;
       case AppMode_ex:
-        if (event.key.keysym.scancode == SDL_SCANCODE_RETURN)
-        {
+        if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           state->mode = AppMode_normal;
 
-          if (strcmp(state->exText, "quit") == 0 || strcmp(state->exText, "q") == 0)
-          {
+          if (strcmp(state->exText, "quit") == 0 ||
+              strcmp(state->exText, "q") == 0) {
             return 1;
           }
-          else
-          {
+          if (strcmp(state->exText, "debug") == 0) {
+            printf("cursor position %lu\n", state->cursor_position);
+            printf("text length: %lu\n", strlen(state->text));
+          } else {
             printf("invalid command %s\n", state->exText);
           }
-        }
-        else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
-        {
+        } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           size_t len = strlen(state->exText);
-          if (len > 1)
-          {
+          if (len > 0) {
             state->exText[len - 1] = '\0';
           }
+        } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+          state->mode = AppMode_normal;
+          state->exText[0] = '\0';
         }
         break;
       case AppMode_insert:
-        if (event.key.keysym.scancode == SDL_SCANCODE_RETURN)
-        {
+        if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           size_t len = strlen(state->text);
-          if (len == 0)
-          {
-            state->text[0] = '\n';
-            state->text[1] = '\0';
-          }
-          else
-          {
-            state->text[len-1] = '\n';
-            state->text[len] = '\0';
-          }
-        }
-        else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE)
-        {
+          state->text[len] = '\n';
+          state->text[len + 1] = '\0';
+        } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           size_t len = strlen(state->text);
-          if (len > 1)
-          {
+          if (len > 0) {
             state->text[len - 1] = '\0';
+            state->cursor_position--;
           }
-        }
-        else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-        {
+        } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
         }
         break;
       default:
-        assert(FALSE);
+        assert(false);
         break;
       }
       break;
     case SDL_TEXTINPUT:
-      switch (state->mode)
-      {
+      switch (state->mode) {
       case AppMode_normal:
-        for (size_t x = 0; x < strlen(event.text.text); ++x)
-        {
-          if (event.text.text[x] == ':')
-          {
+        for (size_t x = 0; x < strlen(event.text.text); ++x) {
+          if (event.text.text[x] == ':') {
             state->mode = AppMode_ex;
             state->exText[0] = '\0';
-          }
-          else if (event.text.text[x] == 'i')
-          {
+          } else if (event.text.text[x] == 'i') {
             state->mode = AppMode_insert;
+          } else if (event.text.text[x] == 'h') {
+            printf("here\n");
+            if (state->cursor_position > 0) {
+              state->cursor_position--;
+            }
+          } else if (event.text.text[x] == 'l') {
+            printf("here\n");
+            if (state->cursor_position < (strlen(state->text) - 1)) {
+              state->cursor_position++;
+            }
           }
         }
         break;
@@ -153,9 +144,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender)
         break;
       case AppMode_insert:
         strcat(state->text, event.text.text);
+
+        state->cursor_position += strlen(event.text.text);
         break;
       default:
-        assert(FALSE);
+        assert(false);
         break;
       }
       break;
@@ -164,44 +157,31 @@ extern UPDATE_AND_RENDER(UpdateAndRender)
     }
   }
 
-  static int count = -1;
-  count++;
-  static char blink = ' ';
-
   // render
-  const char* modeName = NULL;
-  switch (state->mode)
-  {
+  const char *modeName = NULL;
+  switch (state->mode) {
   case AppMode_normal: {
     modeName = normalModeName;
     break;
   }
   case AppMode_ex: {
     modeName = exModeName;
-    SDL_Color color = { 0, 0, 0, 0 };
 
-    char* fText = (char*)pushSize(&transientState->arena, strlen(state->exText) + 3, DEFAULT_ALIGMENT);
-    if (count >= 80)
-    {
-      count = 0;
-      blink = blink == ' ' ? '*' : ' ';
-    }
+    char *fText = (char *)pushSize(&transientState->arena,
+                                   strlen(state->exText) + 1, DEFAULT_ALIGMENT);
+    sprintf(fText, ":%s", state->exText);
 
-    sprintf(fText, ":%s%c", state->exText, blink);
-    SDL_Surface* text_surf = TTF_RenderText_Solid(state->font, fText, color);
-    if (!text_surf)
-    {
-      printf("Failed to render ex command text: %s\n", TTF_GetError());
-    }
-
-    SDL_Texture* text = SDL_CreateTextureFromSurface(buffer->renderer, text_surf);
+    SDL_Surface *text_surf =
+        TTF_cpointer(TTF_RenderText_Solid(state->font, fText, sdlFontColor));
+    SDL_Texture *text =
+        SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, text_surf));
 
     SDL_Rect dest;
     dest.x = 0.01 * buffer->width;
     dest.y = buffer->height - text_surf->h - 0.01 * buffer->height;
     dest.w = text_surf->w;
     dest.h = text_surf->h;
-    SDL_RenderCopy(buffer->renderer, text, NULL, &dest);
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
 
     SDL_DestroyTexture(text);
     SDL_FreeSurface(text_surf);
@@ -212,68 +192,101 @@ extern UPDATE_AND_RENDER(UpdateAndRender)
     break;
   }
   default:
-    assert(FALSE);
+    assert(false);
     break;
   }
+  const int font_h = TTF_FontHeight(state->font);
+  const int font_w = font_h / 2;
 
+  const int margin_x = buffer->width * 0.01;
+  const int margin_y = buffer->height * 0.01;
+
+  int x = margin_x;
+  int y = margin_y;
   // render text
-  if (strlen(state->text) > 0)
-  {
-    SDL_Color color = { 0, 0, 0, 0 };
+  SDL_Rect dest;
+  for (unsigned long i = 0; i < strlen(state->text); ++i) {
+    uint32 ch = state->text[i];
 
-    SDL_Surface* text_surf = TTF_RenderText_Solid(state->font, state->text, color);
-    if (!text_surf)
-    {
-      printf("Failed to render ex command text: %s\n", TTF_GetError());
+    if (ch == '\n') {
+      y += font_h;
+      x = margin_x;
+      continue;
     }
 
-    SDL_Texture* text = SDL_CreateTextureFromSurface(buffer->renderer, text_surf);
+    SDL_Surface *glyph_surface =
+        TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
 
-    SDL_Rect dest;
-    dest.x = buffer->width * 0.01;
-    dest.y = buffer->height * 0.01;
-    dest.w = text_surf->w;
-    dest.h = text_surf->h;
-    SDL_RenderCopy(buffer->renderer, text, NULL, &dest);
+    SDL_Texture *text = SDL_cpointer(
+        SDL_CreateTextureFromSurface(buffer->renderer, glyph_surface));
+
+    dest.x = x;
+    dest.y = y;
+    dest.w = glyph_surface->w;
+    dest.h = glyph_surface->h;
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
+
+    {
+      // render cursor
+      if (i == state->cursor_position) {
+        dest.x = x;
+        dest.y = y;
+        dest.w = font_w;
+        dest.h = font_h;
+
+        SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
+        SDL_ccode(
+            SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
+        if (state->mode != AppMode_ex) {
+          SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+        } else {
+          SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
+        }
+      }
+    }
 
     SDL_DestroyTexture(text);
-    SDL_FreeSurface(text_surf);
+    SDL_FreeSurface(glyph_surface);
+    x += dest.w;
   }
 
-  // Render status separator
   {
-    SDL_SetRenderDrawColor(buffer->renderer, 0, 0, 0, 0);
-    int h;
-    int w;
-    sttfcc(TTF_SizeUTF8(state->font, "test", &w, &h));
+    // render cursor (if cursor is outside of the text)
+    if (state->cursor_position >= strlen(state->text)) {
+      dest.x = x;
+      dest.y = y;
+      dest.w = font_w;
+      dest.h = font_h;
 
-    int y = buffer->height - h * 2;
-    SDL_RenderDrawLine(buffer->renderer, 0, y, buffer->width, y);
+      SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
+      SDL_ccode(
+          SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
+      if (state->mode != AppMode_ex) {
+        SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+      } else {
+        SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
+      }
+    }
   }
-
 
   // render mode name
   {
-    SDL_Color color = { 255, 0, 0, 0 };
-    SDL_Surface* text_surf = TTF_RenderText_Solid(state->font, modeName, color);
-    if (!text_surf)
-    {
-      printf("Failed to render mode name: %s\n", TTF_GetError());
-    }
+    SDL_Surface *text_surf =
+        TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
 
-    SDL_Texture* text = SDL_CreateTextureFromSurface(buffer->renderer, text_surf);
+    SDL_Texture *text =
+        SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, text_surf));
 
     SDL_Rect dest;
     dest.x = buffer->width - text_surf->w - 0.01 * buffer->width;
     dest.y = 0;
     dest.w = text_surf->w;
     dest.h = text_surf->h;
-    SDL_RenderCopy(buffer->renderer, text, NULL, &dest);
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, text, NULL, &dest));
 
     SDL_DestroyTexture(text);
     SDL_FreeSurface(text_surf);
   }
-
 
   return 0;
 }
