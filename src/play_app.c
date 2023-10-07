@@ -17,12 +17,22 @@ const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
 const char *insertModeName = "INSERT";
 
+  const uint32 backgroundColor = 0x00000000;
+  const uint32 fontColor = 0xFFFFFF00;
+  const uint32 cursorColor = fontColor | 0x9F;
+
+void render_cursor(SDL_Renderer * renderer, SDL_Rect dest, bool32 fill) {
+  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
+  if (fill) {
+    SDL_ccode(SDL_RenderFillRect(renderer, &dest));
+  } else {
+    SDL_ccode(SDL_RenderDrawRect(renderer, &dest));
+  }
+}
+
 extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
-  uint32 backgroundColor = 0x00000000;
-  uint32 fontColor = 0xFFFFFF00;
-  uint32 cursorColor = fontColor | 0x9F;
   SDL_Color sdlModeColor = {UNHEX(0xFF000000)};
   SDL_Color sdlFontColor = {UNHEX(fontColor)};
 
@@ -172,9 +182,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int y = margin_y;
 
     unsigned long cursor_ix = state->cursor_position; // TODO naming
-    V2i cursor_pos = {-1, -1};
-
-    SDL_Rect dest;
+    bool32 cursor_rendered = false;
 
     for (unsigned long i = 0; i < strlen(state->text); ++i) {
       uint32 ch = state->text[i];
@@ -186,32 +194,31 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         continue;
       }
 
+      if (i == cursor_ix) {
+        SDL_Rect dest;
+        dest.x = x;
+        dest.y = y;
+        dest.w = font_w;
+        dest.h = font_h;
+        render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
+        cursor_rendered = true;
+      }
+
       SDL_Surface *surface = TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
       SurfaceRenderer sr = SR_create(buffer->renderer, surface);
       int w = sr.surface->w;
       SR_renderFullSizeAndDestroy(&sr, x, y);
-      if (i == cursor_ix) {
-        cursor_pos.x = x;
-        cursor_pos.y = y;
-      }
       x += w;
     }
 
-    {
-      // render cursor
-      dest.x = cursor_pos.x == -1 ? x : cursor_pos.x;
-      dest.y = cursor_pos.y == -1 ? y : cursor_pos.y;
+    if (!cursor_rendered) {
+      SDL_Rect dest;
+      dest.x = x;
+      dest.y = y;
       dest.w = font_w;
       dest.h = font_h;
 
-      SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(cursorColor)));
-      SDL_ccode(
-          SDL_SetRenderDrawBlendMode(buffer->renderer, SDL_BLENDMODE_BLEND));
-      if (state->mode != AppMode_ex) {
-        SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
-      } else {
-        SDL_ccode(SDL_RenderDrawRect(buffer->renderer, &dest));
-      }
+      render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
     }
   }
 
