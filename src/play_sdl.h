@@ -19,7 +19,7 @@ typedef struct SurfaceRenderer {
 } SurfaceRenderer;
 
 SurfaceRenderer SR_create(SDL_Renderer *renderer, SDL_Surface *surface);
-void SR_renderAndDestroy(SurfaceRenderer *surfaceRenderer, SDL_Rect *dest);
-void SR_renderFullSizeAndDestroy(SurfaceRenderer *sr, int x, int y);
+void SR_render_and_destroy(SurfaceRenderer *surfaceRenderer, SDL_Rect *dest);
+void SR_render_fullsize_and_destroy(SurfaceRenderer *sr, int x, int y);
 
 #endif

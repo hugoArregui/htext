@@ -17,11 +17,11 @@ const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
 const char *insertModeName = "INSERT";
 
-  const uint32 backgroundColor = 0x00000000;
-  const uint32 fontColor = 0xFFFFFF00;
-  const uint32 cursorColor = fontColor | 0x9F;
+const uint32 backgroundColor = 0x00000000;
+const uint32 fontColor = 0xFFFFFF00;
+const uint32 cursorColor = fontColor | 0x9F;
 
-void render_cursor(SDL_Renderer * renderer, SDL_Rect dest, bool32 fill) {
+void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
   if (fill) {
     SDL_ccode(SDL_RenderFillRect(renderer, &dest));
@@ -120,7 +120,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           size_t len = strlen(state->text);
           if (len > 0) {
             state->text[len - 1] = '\0';
-            state->cursor_position--;
+            if (state->cursor_position > 0) {
+              state->cursor_position--;
+            }
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
@@ -154,11 +156,20 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       case AppMode_ex:
         strcat(state->exText, event.text.text);
         break;
-      case AppMode_insert:
-        strcat(state->text, event.text.text);
+      case AppMode_insert: {
+        unsigned int text_len = strlen(state->text);
+        unsigned int input_len = strlen(event.text.text);
 
-        state->cursor_position += strlen(event.text.text);
-        break;
+        size_t temp_size = text_len + input_len - state->cursor_position + 1;
+        char *temp = (char *)pushSize(&transientState->arena, temp_size,
+                                      DEFAULT_ALIGMENT);
+
+        memcpy(temp, event.text.text, input_len);
+        memcpy(temp + input_len, state->text + state->cursor_position,
+               text_len - state->cursor_position + 1);
+        memcpy(state->text + state->cursor_position, temp, temp_size);
+        state->cursor_position += input_len;
+      } break;
       default:
         assert(false);
         break;
@@ -176,10 +187,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     const int font_w = font_h / 2;
 
     const int margin_x = buffer->width * 0.01;
-    const int margin_y = buffer->height * 0.01;
 
     int x = margin_x;
-    int y = margin_y;
+    int y = buffer->height * 0.01;
 
     unsigned long cursor_ix = state->cursor_position; // TODO naming
     bool32 cursor_rendered = false;
@@ -204,10 +214,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         cursor_rendered = true;
       }
 
-      SDL_Surface *surface = TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
       SurfaceRenderer sr = SR_create(buffer->renderer, surface);
       int w = sr.surface->w;
-      SR_renderFullSizeAndDestroy(&sr, x, y);
+      SR_render_fullsize_and_destroy(&sr, x, y);
       x += w;
     }
 
@@ -244,28 +255,26 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
 
     SDL_Surface *text_surface =
-      TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
+        TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
 
     SurfaceRenderer sr = SR_create(buffer->renderer, text_surface);
-    SR_renderFullSizeAndDestroy(
-                                &sr,
-                                buffer->width - text_surface->w - buffer->width * 0.01,
-                                buffer->height - text_surface->h - 0.03 * buffer->height);
+    SR_render_fullsize_and_destroy(
+        &sr, buffer->width - text_surface->w - buffer->width * 0.01,
+        buffer->height - text_surface->h - 0.03 * buffer->height);
   }
 
   if (state->mode == AppMode_ex) {
-    char *fText = (char *)pushSize(&transientState->arena,
-                                   strlen(state->exText) + 1, DEFAULT_ALIGMENT);
-    sprintf(fText, ":%s", state->exText);
+    char *text = (char *)pushSize(&transientState->arena,
+                                  strlen(state->exText) + 1, DEFAULT_ALIGMENT);
+    sprintf(text, ":%s", state->exText);
 
     SDL_Surface *text_surface =
-      TTF_cpointer(TTF_RenderText_Solid(state->font, fText, sdlFontColor));
+        TTF_cpointer(TTF_RenderText_Solid(state->font, text, sdlFontColor));
 
     SurfaceRenderer sr = SR_create(buffer->renderer, text_surface);
-    SR_renderFullSizeAndDestroy(
-                                &sr,
-                                0.01 * buffer->width,
-                                buffer->height - text_surface->h - 0.01 * buffer->height);
+    SR_render_fullsize_and_destroy(&sr, 0.01 * buffer->width,
+                                   buffer->height - text_surface->h -
+                                       0.01 * buffer->height);
   }
 
 #if DEBUG_WINDOW
@@ -291,10 +300,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         continue;
       }
 
-      SDL_Surface *surface = TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, color));
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, color));
       SurfaceRenderer sr = SR_create(buffer->debugRenderer, surface);
       int w = sr.surface->w;
-      SR_renderFullSizeAndDestroy(&sr, x, y);
+      SR_render_fullsize_and_destroy(&sr, x, y);
       x += w;
     }
   }
