@@ -5,6 +5,7 @@
 void TTF_ccode(int code) {
   if (code < 0) {
     printf("Error : %s\n", TTF_GetError());
+    SDL_Quit();
     exit(1);
   }
 }
@@ -12,6 +13,7 @@ void TTF_ccode(int code) {
 void *TTF_cpointer(void *p) {
   if (!p) {
     printf("Error : %s\n", TTF_GetError());
+    SDL_Quit();
     exit(1);
   }
   return p;
@@ -20,6 +22,7 @@ void *TTF_cpointer(void *p) {
 void SDL_ccode(int code) {
   if (code < 0) {
     printf("Error : %s\n", SDL_GetError());
+    SDL_Quit();
     exit(1);
   }
 }
@@ -27,6 +30,7 @@ void SDL_ccode(int code) {
 void *SDL_cpointer(void *p) {
   if (!p) {
     printf("Error : %s\n", SDL_GetError());
+    SDL_Quit();
     exit(1);
   }
   return p;
