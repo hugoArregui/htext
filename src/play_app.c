@@ -98,6 +98,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           if (strcmp(state->exText, "quit") == 0 ||
               strcmp(state->exText, "q") == 0) {
             return 1;
+          } else if (strcmp(state->exText, "clear") == 0) {
+            state->text[0] = '\0';
+            state->cursor_position = 0;
           } else {
             printf("invalid command %s\n", state->exText);
           }
@@ -116,13 +119,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           size_t len = strlen(state->text);
           state->text[len] = '\n';
           state->text[len + 1] = '\0';
+          state->cursor_position++;
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           size_t len = strlen(state->text);
-          if (len > 0) {
-            state->text[len - 1] = '\0';
-            if (state->cursor_position > 0) {
-              state->cursor_position--;
-            }
+          if (len > 0 && state->cursor_position > 0) {
+            int cur_position = state->cursor_position - 1;
+            memcpy(state->text + cur_position, state->text + cur_position + 1,
+                   len - cur_position);
+            state->cursor_position--;
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
@@ -191,7 +195,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int x = margin_x;
     int y = buffer->height * 0.01;
 
-    unsigned long cursor_ix = state->cursor_position; // TODO naming
     bool32 cursor_rendered = false;
 
     for (unsigned long i = 0; i < strlen(state->text); ++i) {
@@ -200,11 +203,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       if (ch == '\n') {
         y += font_h;
         x = margin_x;
-        cursor_ix++;
         continue;
       }
 
-      if (i == cursor_ix) {
+      if (i == state->cursor_position) {
         SDL_Rect dest;
         dest.x = x;
         dest.y = y;
@@ -214,12 +216,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         cursor_rendered = true;
       }
 
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-      int w = sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-      x += w;
+      if (ch != '\n') {
+        SDL_Surface *surface =
+            TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+        SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+        int w = sr.surface->w;
+        SR_render_fullsize_and_destroy(&sr, x, y);
+        x += w;
+      }
     }
 
     if (!cursor_rendered) {
