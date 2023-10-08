@@ -31,8 +31,8 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
 }
 
 void eb_insert_text(MemoryArena *arena, EditorBuffer *buffer, char *text) {
-  unsigned int text_len = strlen(buffer->text);
-  unsigned int input_len = strlen(text);
+  uint64 text_len = strlen(buffer->text);
+  uint64 input_len = strlen(text);
 
   size_t temp_size = text_len + input_len - buffer->cursor_pos + 1;
   char *temp = (char *)pushSize(arena, temp_size, DEFAULT_ALIGMENT);
@@ -45,9 +45,9 @@ void eb_insert_text(MemoryArena *arena, EditorBuffer *buffer, char *text) {
 }
 
 void eb_remove_char(EditorBuffer *buffer) {
-  size_t len = strlen(buffer->text);
+  uint64 len = strlen(buffer->text);
   if (len > 0 && buffer->cursor_pos > 0) {
-    int cur_position = buffer->cursor_pos - 1;
+    uint64 cur_position = buffer->cursor_pos - 1;
     memcpy(buffer->text + cur_position, buffer->text + cur_position + 1,
            len - cur_position);
     buffer->cursor_pos--;
@@ -57,6 +57,26 @@ void eb_remove_char(EditorBuffer *buffer) {
 void eb_clear(EditorBuffer *buffer) {
   buffer->text[0] = '\0';
   buffer->cursor_pos = 0;
+}
+
+uint64 find_bol(char *text, uint64 from_pos) {
+  uint64 len = strlen(text);
+  for (uint64 i = from_pos; i > 0; --i) {
+    if (text[i] == '\n') {
+      return (i + 1) > len ? i : i + 1;
+    }
+  }
+  return 0;
+}
+
+uint64 find_eol(char *text, uint64 from_pos) {
+  uint64 len = strlen(text);
+  for (uint64 i = from_pos; i < len; ++i) {
+    if (text[i] == '\n') {
+      return i > 0 ? i - 1 : 0;
+    }
+  }
+  return len;
 }
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
@@ -163,19 +183,32 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       switch (state->mode) {
       case AppMode_normal:
         for (size_t x = 0; x < strlen(event.text.text); ++x) {
-          if (event.text.text[x] == ':') {
+          switch (event.text.text[x]) {
+          case ':': {
             state->mode = AppMode_ex;
             eb_clear(exBuffer);
-          } else if (event.text.text[x] == 'i') {
+          } break;
+          case 'i': {
             state->mode = AppMode_insert;
-          } else if (event.text.text[x] == 'h') {
+          } break;
+          case 'h': {
             if (mainBuffer->cursor_pos > 0) {
               mainBuffer->cursor_pos--;
             }
-          } else if (event.text.text[x] == 'l') {
+          } break;
+          case 'l': {
             if (mainBuffer->cursor_pos < (strlen(mainBuffer->text) - 1)) {
               mainBuffer->cursor_pos++;
             }
+          } break;
+          case 'H': {
+            mainBuffer->cursor_pos =
+                find_bol(mainBuffer->text, mainBuffer->cursor_pos);
+          } break;
+          case 'L': {
+            mainBuffer->cursor_pos =
+                find_eol(mainBuffer->text, mainBuffer->cursor_pos);
+          } break;
           }
         }
         break;
@@ -208,7 +241,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     bool32 cursor_rendered = false;
 
-    for (unsigned long i = 0; i < strlen(mainBuffer->text); ++i) {
+    for (uint64 i = 0; i < strlen(mainBuffer->text); ++i) {
       uint32 ch = mainBuffer->text[i];
 
       if (ch == '\n') {
@@ -306,7 +339,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int x = margin_x;
     int y = margin_y;
 
-    for (unsigned long i = 0; i < strlen(text); ++i) {
+    for (uint64 i = 0; i < strlen(text); ++i) {
       uint32 ch = text[i];
 
       if (ch == '\n') {
