@@ -30,6 +30,35 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   }
 }
 
+void eb_insert_text(MemoryArena *arena, EditorBuffer *buffer, char *text) {
+  unsigned int text_len = strlen(buffer->text);
+  unsigned int input_len = strlen(text);
+
+  size_t temp_size = text_len + input_len - buffer->cursor_pos + 1;
+  char *temp = (char *)pushSize(arena, temp_size, DEFAULT_ALIGMENT);
+
+  memcpy(temp, text, input_len);
+  memcpy(temp + input_len, buffer->text + buffer->cursor_pos,
+         text_len - buffer->cursor_pos + 1);
+  memcpy(buffer->text + buffer->cursor_pos, temp, temp_size);
+  buffer->cursor_pos += input_len;
+}
+
+void eb_remove_char(EditorBuffer *buffer) {
+  size_t len = strlen(buffer->text);
+  if (len > 0 && buffer->cursor_pos > 0) {
+    int cur_position = buffer->cursor_pos - 1;
+    memcpy(buffer->text + cur_position, buffer->text + cur_position + 1,
+           len - cur_position);
+    buffer->cursor_pos--;
+  }
+}
+
+void eb_clear(EditorBuffer *buffer) {
+  buffer->text[0] = '\0';
+  buffer->cursor_pos = 0;
+}
+
 extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
@@ -59,12 +88,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
     // TODO: how are we going to handle this?
-    state->text = (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
-    state->text[0] = '\0';
+    state->mainBuffer.text =
+        (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->mainBuffer.text[0] = '\0';
 
     // TODO: how are we going to handle this?
-    state->exText = (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
-    state->text[0] = '\0';
+    state->exBuffer.text =
+        (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->exBuffer.text[0] = '\0';
 
     state->isInitialized = true;
   }
@@ -84,6 +115,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     printf("RELOAD\n");
   }
 
+  EditorBuffer *mainBuffer = &state->mainBuffer;
+  EditorBuffer *exBuffer = &state->exBuffer;
+
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     switch (event.type) {
@@ -95,39 +129,27 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           state->mode = AppMode_normal;
 
-          if (strcmp(state->exText, "quit") == 0 ||
-              strcmp(state->exText, "q") == 0) {
+          if (strcmp(exBuffer->text, "quit") == 0 ||
+              strcmp(exBuffer->text, "q") == 0) {
             return 1;
-          } else if (strcmp(state->exText, "clear") == 0) {
-            state->text[0] = '\0';
-            state->cursor_position = 0;
-          } else {
-            printf("invalid command %s\n", state->exText);
+          } else if (strcmp(exBuffer->text, "clear") == 0) {
+            eb_clear(mainBuffer);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          size_t len = strlen(state->exText);
-          if (len > 0) {
-            state->exText[len - 1] = '\0';
-          }
+          eb_remove_char(exBuffer);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
-          state->exText[0] = '\0';
+          eb_clear(exBuffer);
         }
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          size_t len = strlen(state->text);
-          state->text[len] = '\n';
-          state->text[len + 1] = '\0';
-          state->cursor_position++;
+          size_t len = strlen(mainBuffer->text);
+          mainBuffer->text[len] = '\n';
+          mainBuffer->text[len + 1] = '\0';
+          mainBuffer->cursor_pos++;
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          size_t len = strlen(state->text);
-          if (len > 0 && state->cursor_position > 0) {
-            int cur_position = state->cursor_position - 1;
-            memcpy(state->text + cur_position, state->text + cur_position + 1,
-                   len - cur_position);
-            state->cursor_position--;
-          }
+          eb_remove_char(mainBuffer);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
         }
@@ -143,36 +165,25 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         for (size_t x = 0; x < strlen(event.text.text); ++x) {
           if (event.text.text[x] == ':') {
             state->mode = AppMode_ex;
-            state->exText[0] = '\0';
+            eb_clear(exBuffer);
           } else if (event.text.text[x] == 'i') {
             state->mode = AppMode_insert;
           } else if (event.text.text[x] == 'h') {
-            if (state->cursor_position > 0) {
-              state->cursor_position--;
+            if (mainBuffer->cursor_pos > 0) {
+              mainBuffer->cursor_pos--;
             }
           } else if (event.text.text[x] == 'l') {
-            if (state->cursor_position < (strlen(state->text) - 1)) {
-              state->cursor_position++;
+            if (mainBuffer->cursor_pos < (strlen(mainBuffer->text) - 1)) {
+              mainBuffer->cursor_pos++;
             }
           }
         }
         break;
       case AppMode_ex:
-        strcat(state->exText, event.text.text);
+        eb_insert_text(&transientState->arena, exBuffer, event.text.text);
         break;
       case AppMode_insert: {
-        unsigned int text_len = strlen(state->text);
-        unsigned int input_len = strlen(event.text.text);
-
-        size_t temp_size = text_len + input_len - state->cursor_position + 1;
-        char *temp = (char *)pushSize(&transientState->arena, temp_size,
-                                      DEFAULT_ALIGMENT);
-
-        memcpy(temp, event.text.text, input_len);
-        memcpy(temp + input_len, state->text + state->cursor_position,
-               text_len - state->cursor_position + 1);
-        memcpy(state->text + state->cursor_position, temp, temp_size);
-        state->cursor_position += input_len;
+        eb_insert_text(&transientState->arena, mainBuffer, event.text.text);
       } break;
       default:
         assert(false);
@@ -197,8 +208,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     bool32 cursor_rendered = false;
 
-    for (unsigned long i = 0; i < strlen(state->text); ++i) {
-      uint32 ch = state->text[i];
+    for (unsigned long i = 0; i < strlen(mainBuffer->text); ++i) {
+      uint32 ch = mainBuffer->text[i];
 
       if (ch == '\n') {
         y += font_h;
@@ -206,7 +217,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         continue;
       }
 
-      if (i == state->cursor_position) {
+      if (i == mainBuffer->cursor_pos) {
         SDL_Rect dest;
         dest.x = x;
         dest.y = y;
@@ -269,8 +280,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   if (state->mode == AppMode_ex) {
     char *text = (char *)pushSize(&transientState->arena,
-                                  strlen(state->exText) + 1, DEFAULT_ALIGMENT);
-    sprintf(text, ":%s", state->exText);
+                                  strlen(exBuffer->text) + 1, DEFAULT_ALIGMENT);
+    sprintf(text, ":%s", exBuffer->text);
 
     SDL_Surface *text_surface =
         TTF_cpointer(TTF_RenderText_Solid(state->font, text, sdlFontColor));
@@ -287,7 +298,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
     SDL_Color color = {UNHEX(debugFontColor)};
     sprintf(text, "Cursor position: %lu\nText length: %lu",
-            state->cursor_position, strlen(state->text));
+            mainBuffer->cursor_pos, strlen(mainBuffer->text));
 
     const int margin_x = buffer->width * 0.01;
     const int margin_y = buffer->height * 0.01;

@@ -115,16 +115,20 @@ inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
 enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert };
 
+
+typedef struct EditorBuffer {
+  char *text;
+  unsigned long cursor_pos;
+} EditorBuffer;
+
 typedef struct State {
   int isInitialized;
   enum AppMode mode;
 
   MemoryArena arena;
 
-  char *text;
-  unsigned long cursor_position;
-
-  char *exText;
+  EditorBuffer mainBuffer;
+  EditorBuffer exBuffer;
 
   TTF_Font *font;
 } State;
