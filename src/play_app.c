@@ -4,6 +4,7 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_main.h>
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
@@ -199,6 +200,22 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           case 'l': {
             if (mainBuffer->cursor_pos < (strlen(mainBuffer->text) - 1)) {
               mainBuffer->cursor_pos++;
+            }
+          } break;
+          case 'k': {
+            uint64 bol = find_bol(mainBuffer->text, mainBuffer->cursor_pos);
+            if (bol > 0) {
+              assert(mainBuffer->cursor_pos >= bol);
+              uint64 previous_line_bol = find_bol(mainBuffer->text, bol - 1);
+              uint64 previous_line_eol = find_eol(mainBuffer->text, bol - 1);
+
+              // TODO: adjust by current offset
+              uint64 offset = mainBuffer->cursor_pos - bol;
+              if ((previous_line_bol + offset) < previous_line_eol) {
+                mainBuffer->cursor_pos = previous_line_bol + offset;
+              } else {
+                mainBuffer->cursor_pos = previous_line_bol;
+              }
             }
           } break;
           case 'H': {
