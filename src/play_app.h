@@ -86,15 +86,6 @@ inline char *pushString(MemoryArena *arena, char *source) {
 /*   result->tempCount = 0; */
 /* } */
 
-#define zeroStruct(instance) zeroSize(sizeof(instance), &(instance))
-inline void zeroSize(memory_index size, void *ptr) {
-  // TODO(casey): Check this guy for performance
-  uint8 *byte = (uint8 *)ptr;
-  while (size--) {
-    *byte++ = 0;
-  }
-}
-
 inline TemporaryMemory beginTemporaryMemory(MemoryArena *arena) {
   TemporaryMemory result;
   result.arena = arena;
@@ -119,6 +110,7 @@ enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert };
 typedef struct EditorBuffer {
   char *text;
   unsigned long cursor_pos;
+  unsigned long max_size;
 } EditorBuffer;
 
 typedef struct State {

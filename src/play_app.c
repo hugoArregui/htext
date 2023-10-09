@@ -14,6 +14,16 @@
 #include <string.h>
 #include <sys/types.h>
 
+/*
+  Cursor position
+  1) no text, cursor at the beginning, which means the cursor is over the
+  position of the char is going to insert 1) insert: 123456\n expect cursor in
+  the second line, so cursor_position = 6
+ */
+
+// TODO better debug logging
+// TODO cursor for ex
+
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
 const char *insertModeName = "INSERT";
@@ -31,18 +41,15 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   }
 }
 
-void eb_insert_text(MemoryArena *arena, EditorBuffer *buffer, char *text) {
-  uint64 text_len = strlen(buffer->text);
-  uint64 input_len = strlen(text);
+void eb_insert_text(EditorBuffer *buffer, char *text) {
+  uint64 buffer_len = strlen(buffer->text);
+  uint64 text_len = strlen(text);
 
-  size_t temp_size = text_len + input_len - buffer->cursor_pos + 1;
-  char *temp = (char *)pushSize(arena, temp_size, DEFAULT_ALIGMENT);
-
-  memcpy(temp, text, input_len);
-  memcpy(temp + input_len, buffer->text + buffer->cursor_pos,
-         text_len - buffer->cursor_pos + 1);
-  memcpy(buffer->text + buffer->cursor_pos, temp, temp_size);
-  buffer->cursor_pos += input_len;
+  assert(buffer->max_size >= (buffer_len + text_len + 1));
+  memcpy(buffer->text + buffer->cursor_pos + text_len,
+         buffer->text + buffer->cursor_pos, buffer_len - buffer->cursor_pos);
+  memcpy(buffer->text + buffer->cursor_pos, text, text_len);
+  buffer->cursor_pos += text_len;
 }
 
 void eb_remove_char(EditorBuffer *buffer) {
@@ -109,13 +116,15 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
     // TODO: how are we going to handle this?
-    state->mainBuffer.text =
-        (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->mainBuffer.max_size = 1000;
+    state->mainBuffer.text = (char *)pushSize(
+        &state->arena, state->mainBuffer.max_size, DEFAULT_ALIGMENT);
     state->mainBuffer.text[0] = '\0';
 
     // TODO: how are we going to handle this?
-    state->exBuffer.text =
-        (char *)pushSize(&state->arena, 1000, DEFAULT_ALIGMENT);
+    state->exBuffer.max_size = 1000;
+    state->exBuffer.text = (char *)pushSize(
+        &state->arena, state->exBuffer.max_size, DEFAULT_ALIGMENT);
     state->exBuffer.text[0] = '\0';
 
     state->isInitialized = true;
@@ -230,10 +239,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         }
         break;
       case AppMode_ex:
-        eb_insert_text(&transientState->arena, exBuffer, event.text.text);
+        eb_insert_text(exBuffer, event.text.text);
         break;
       case AppMode_insert: {
-        eb_insert_text(&transientState->arena, mainBuffer, event.text.text);
+        eb_insert_text(mainBuffer, event.text.text);
       } break;
       default:
         assert(false);
@@ -248,7 +257,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   // -------- rendering
   const int font_h = TTF_FontHeight(state->font);
   {
-    // render text frame
+    // render main buffer
     const int font_w = font_h / 2;
 
     const int margin_x = buffer->width * 0.01;
@@ -277,14 +286,12 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         cursor_rendered = true;
       }
 
-      if (ch != '\n') {
-        SDL_Surface *surface =
-            TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-        SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-        int w = sr.surface->w;
-        SR_render_fullsize_and_destroy(&sr, x, y);
-        x += w;
-      }
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+      int w = sr.surface->w;
+      SR_render_fullsize_and_destroy(&sr, x, y);
+      x += w;
     }
 
     if (!cursor_rendered) {
