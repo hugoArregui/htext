@@ -2,34 +2,34 @@
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_surface.h>
 
-void TTF_ccode(int code) {
+void _TTF_ccode(int code, char* file, int line) {
   if (code < 0) {
-    printf("Error : %s\n", TTF_GetError());
+    printf("Error (%s:%d): %s\n", file, line, TTF_GetError());
     SDL_Quit();
     exit(1);
   }
 }
 
-void *TTF_cpointer(void *p) {
+void *_TTF_cpointer(void *p, char* file, int line) {
   if (!p) {
-    printf("Error : %s\n", TTF_GetError());
+    printf("Error (%s:%d): %s\n", file, line, TTF_GetError());
     SDL_Quit();
     exit(1);
   }
   return p;
 }
 
-void SDL_ccode(int code) {
+void _SDL_ccode(int code, char* file, int line) {
   if (code < 0) {
-    printf("Error : %s\n", SDL_GetError());
+    printf("Error (%s:%d): %s\n", file, line, SDL_GetError());
     SDL_Quit();
     exit(1);
   }
 }
 
-void *SDL_cpointer(void *p) {
+void *_SDL_cpointer(void *p, char* file, int line) {
   if (!p) {
-    printf("Error : %s\n", SDL_GetError());
+    printf("Error (%s:%d): %s\n", file, line, SDL_GetError());
     SDL_Quit();
     exit(1);
   }

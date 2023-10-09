@@ -42,7 +42,7 @@ typedef double real64;
 #define Gigabytes(Value) (Megabytes(Value) * 1024LL)
 #define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
-#define DEBUG_WINDOW 1
+#define DEBUG_WINDOW 0
 
 typedef struct PlatformState {
   uint64 totalSize;

@@ -106,11 +106,21 @@ inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
 enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert };
 
+struct Line;
+
+typedef struct Line {
+  char *text;
+  uint32 max_size;
+  uint32 size;
+  struct Line *prev;
+  struct Line *next;
+} Line;
 
 typedef struct EditorBuffer {
-  char *text;
-  unsigned long cursor_pos;
-  unsigned long max_size;
+  Line* line;
+  Line* deleted_line;
+  Line* cursor_line;
+  uint32 cursor_pos;
 } EditorBuffer;
 
 typedef struct State {

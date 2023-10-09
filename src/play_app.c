@@ -14,15 +14,10 @@
 #include <string.h>
 #include <sys/types.h>
 
-/*
-  Cursor position
-  1) no text, cursor at the beginning, which means the cursor is over the
-  position of the char is going to insert 1) insert: 123456\n expect cursor in
-  the second line, so cursor_position = 6
- */
-
 // TODO better debug logging
 // TODO cursor for ex
+// TODO load and write file
+// TODO cursor is not transparent
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
@@ -31,6 +26,51 @@ const char *insertModeName = "INSERT";
 const uint32 backgroundColor = 0x00000000;
 const uint32 fontColor = 0xFFFFFF00;
 const uint32 cursorColor = fontColor | 0x9F;
+
+#define ASSERT_LINE_INTEGRITY 1
+
+#if ASSERT_LINE_INTEGRITY
+#define assert_line_integrity(state)                                           \
+  _assert_line_integrity(state, __FILE__, __LINE__)
+void _assert_line_integrity(State *state, char *file, int linenum) {
+  assert(state->exBuffer.line->next == NULL);
+  assert(state->exBuffer.deleted_line == NULL);
+
+  EditorBuffer *mainBuffer = &state->mainBuffer;
+
+  Line *prev_line = NULL;
+  for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
+    if (line->prev != prev_line) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->prev == prev_line);
+    }
+    if (line->max_size == 0) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->max_size > 0);
+    }
+    prev_line = line;
+  }
+
+  prev_line = NULL;
+  for (Line *line = mainBuffer->deleted_line; line != NULL; line = line->next) {
+    if (line->size > 0) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->size == 0);
+    }
+    if (line->max_size == 0) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->max_size > 0);
+    }
+    if (line->prev != prev_line) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->prev == prev_line);
+    }
+    prev_line = line;
+  }
+}
+#else
+void _assert_line_integrity(State *state, char *file, int linenum);
+#endif
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
@@ -41,50 +81,96 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   }
 }
 
+bool32 line_eq(Line *line, char *str) {
+  return strncmp(line->text, str, line->size) == 0;
+}
+
+EditorBuffer eb_create(MemoryArena *arena) {
+  Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
+  line->max_size = 200;
+  line->size = 0;
+  line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
+  line->prev = NULL;
+  line->next = NULL;
+  return (EditorBuffer){.line = line, .cursor_line = line, .cursor_pos = 0};
+}
+
 void eb_insert_text(EditorBuffer *buffer, char *text) {
-  uint64 buffer_len = strlen(buffer->text);
   uint64 text_len = strlen(text);
 
-  assert(buffer->max_size >= (buffer_len + text_len + 1));
-  memcpy(buffer->text + buffer->cursor_pos + text_len,
-         buffer->text + buffer->cursor_pos, buffer_len - buffer->cursor_pos);
-  memcpy(buffer->text + buffer->cursor_pos, text, text_len);
+  Line *line = buffer->cursor_line;
+
+  assert(line->max_size >= (line->size + text_len));
+  memcpy(line->text + buffer->cursor_pos + text_len,
+         line->text + buffer->cursor_pos, line->size - buffer->cursor_pos);
+  memcpy(line->text + buffer->cursor_pos, text, text_len);
+  line->size += text_len;
   buffer->cursor_pos += text_len;
 }
 
-void eb_remove_char(EditorBuffer *buffer) {
-  uint64 len = strlen(buffer->text);
-  if (len > 0 && buffer->cursor_pos > 0) {
-    uint64 cur_position = buffer->cursor_pos - 1;
-    memcpy(buffer->text + cur_position, buffer->text + cur_position + 1,
-           len - cur_position);
-    buffer->cursor_pos--;
+void eb_new_line(MemoryArena *arena, EditorBuffer *buffer) {
+  Line *new_line;
+  if (buffer->deleted_line != NULL) {
+    new_line = buffer->deleted_line;
+    buffer->deleted_line = buffer->deleted_line->next;
+    if (buffer->deleted_line != NULL) {
+      buffer->deleted_line->prev = NULL;
+      if (buffer->deleted_line->next != NULL) {
+        buffer->deleted_line->next->prev = buffer->deleted_line;
+      }
+    }
+  } else {
+    new_line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
+    new_line->max_size = 200;
+    new_line->text =
+        (char *)pushSize(arena, new_line->max_size, DEFAULT_ALIGMENT);
   }
-}
-
-void eb_clear(EditorBuffer *buffer) {
-  buffer->text[0] = '\0';
+  new_line->size = 0;
+  new_line->next = buffer->cursor_line->next;
+  new_line->prev = buffer->cursor_line;
+  buffer->cursor_line->next = new_line;
+  buffer->cursor_line = new_line;
   buffer->cursor_pos = 0;
 }
 
-uint64 find_bol(char *text, uint64 from_pos) {
-  uint64 len = strlen(text);
-  for (uint64 i = from_pos; i > 0; --i) {
-    if (text[i] == '\n') {
-      return (i + 1) > len ? i : i + 1;
-    }
-  }
-  return 0;
-}
+void eb_remove_char(EditorBuffer *buffer) {
+  if (buffer->cursor_pos == 0) {
+    if (buffer->cursor_line->prev != NULL) {
+      Line *line_to_remove = buffer->cursor_line;
 
-uint64 find_eol(char *text, uint64 from_pos) {
-  uint64 len = strlen(text);
-  for (uint64 i = from_pos; i < len; ++i) {
-    if (text[i] == '\n') {
-      return i > 0 ? i - 1 : 0;
+      // we remove line_to_remove
+      buffer->cursor_line = line_to_remove->prev;
+      buffer->cursor_line->next = line_to_remove->next;
+      if (buffer->cursor_line->next != NULL) {
+        buffer->cursor_line->next->prev = buffer->cursor_line;
+      }
+
+      buffer->cursor_pos = buffer->cursor_line->size;
+      if (line_to_remove->size > 0) {
+        // we need to join line_to_remove with prev cursor line
+        assert(buffer->cursor_line->max_size >=
+               (buffer->cursor_line->size + line_to_remove->size));
+        memcpy(buffer->cursor_line->text + buffer->cursor_line->size,
+               line_to_remove->text, line_to_remove->size);
+        buffer->cursor_line->size += line_to_remove->size;
+      }
+
+      line_to_remove->size = 0;
+      line_to_remove->next = buffer->deleted_line;
+      line_to_remove->prev = NULL;
+      if (buffer->deleted_line != NULL) {
+        buffer->deleted_line->prev = line_to_remove;
+      }
+      buffer->deleted_line = line_to_remove;
     }
+  } else {
+    assert(buffer->cursor_pos <= buffer->cursor_line->size);
+    memcpy(buffer->cursor_line->text + buffer->cursor_pos,
+           buffer->cursor_line->text + buffer->cursor_pos + 1,
+           buffer->cursor_line->size - buffer->cursor_pos);
+    buffer->cursor_line->size--;
+    buffer->cursor_pos--;
   }
-  return len;
 }
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
@@ -115,17 +201,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
-    // TODO: how are we going to handle this?
-    state->mainBuffer.max_size = 1000;
-    state->mainBuffer.text = (char *)pushSize(
-        &state->arena, state->mainBuffer.max_size, DEFAULT_ALIGMENT);
-    state->mainBuffer.text[0] = '\0';
-
-    // TODO: how are we going to handle this?
-    state->exBuffer.max_size = 1000;
-    state->exBuffer.text = (char *)pushSize(
-        &state->arena, state->exBuffer.max_size, DEFAULT_ALIGMENT);
-    state->exBuffer.text[0] = '\0';
+    state->mainBuffer = eb_create(&state->arena);
+    state->exBuffer = eb_create(&state->arena);
 
     state->isInitialized = true;
   }
@@ -159,27 +236,25 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           state->mode = AppMode_normal;
 
-          if (strcmp(exBuffer->text, "quit") == 0 ||
-              strcmp(exBuffer->text, "q") == 0) {
+          if (line_eq(exBuffer->line, "quit") || line_eq(exBuffer->line, "q")) {
             return 1;
-          } else if (strcmp(exBuffer->text, "clear") == 0) {
-            eb_clear(mainBuffer);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           eb_remove_char(exBuffer);
+          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
-          eb_clear(exBuffer);
+          exBuffer->line->size = 0;
+          exBuffer->cursor_pos = 0;
         }
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          size_t len = strlen(mainBuffer->text);
-          mainBuffer->text[len] = '\n';
-          mainBuffer->text[len + 1] = '\0';
-          mainBuffer->cursor_pos++;
+          eb_new_line(&state->arena, mainBuffer);
+          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           eb_remove_char(mainBuffer);
+          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
         }
@@ -196,7 +271,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           switch (event.text.text[x]) {
           case ':': {
             state->mode = AppMode_ex;
-            eb_clear(exBuffer);
+            exBuffer->line->size = 0;
+            exBuffer->cursor_pos = 0;
           } break;
           case 'i': {
             state->mode = AppMode_insert;
@@ -207,33 +283,35 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             }
           } break;
           case 'l': {
-            if (mainBuffer->cursor_pos < (strlen(mainBuffer->text) - 1)) {
+            if (mainBuffer->cursor_pos < mainBuffer->cursor_line->size) {
               mainBuffer->cursor_pos++;
             }
           } break;
           case 'k': {
-            uint64 bol = find_bol(mainBuffer->text, mainBuffer->cursor_pos);
-            if (bol > 0) {
-              assert(mainBuffer->cursor_pos >= bol);
-              uint64 previous_line_bol = find_bol(mainBuffer->text, bol - 1);
-              uint64 previous_line_eol = find_eol(mainBuffer->text, bol - 1);
-
-              // TODO: adjust by current offset
-              uint64 offset = mainBuffer->cursor_pos - bol;
-              if ((previous_line_bol + offset) < previous_line_eol) {
-                mainBuffer->cursor_pos = previous_line_bol + offset;
-              } else {
-                mainBuffer->cursor_pos = previous_line_bol;
+            if (mainBuffer->cursor_line->prev != NULL) {
+              mainBuffer->cursor_line = mainBuffer->cursor_line->prev;
+              if (mainBuffer->cursor_pos > mainBuffer->cursor_line->size) {
+                mainBuffer->cursor_pos = mainBuffer->cursor_line->size;
+              }
+            }
+          } break;
+          case 'j': {
+            if (mainBuffer->cursor_line->next != NULL) {
+              mainBuffer->cursor_line = mainBuffer->cursor_line->next;
+              if (mainBuffer->cursor_pos > mainBuffer->cursor_line->size) {
+                mainBuffer->cursor_pos = mainBuffer->cursor_line->size;
               }
             }
           } break;
           case 'H': {
-            mainBuffer->cursor_pos =
-                find_bol(mainBuffer->text, mainBuffer->cursor_pos);
+            mainBuffer->cursor_pos = 0;
           } break;
           case 'L': {
-            mainBuffer->cursor_pos =
-                find_eol(mainBuffer->text, mainBuffer->cursor_pos);
+            mainBuffer->cursor_pos = mainBuffer->cursor_line->size;
+          } break;
+          case 'A': {
+            mainBuffer->cursor_pos = mainBuffer->cursor_line->size;
+            state->mode = AppMode_insert;
           } break;
           }
         }
@@ -267,41 +345,40 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     bool32 cursor_rendered = false;
 
-    for (uint64 i = 0; i < strlen(mainBuffer->text); ++i) {
-      uint32 ch = mainBuffer->text[i];
+    for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
+      for (uint64 i = 0; i < line->size; ++i) {
+        uint32 ch = line->text[i];
 
-      if (ch == '\n') {
-        y += font_h;
-        x = margin_x;
-        continue;
+        if (line == mainBuffer->cursor_line && i == mainBuffer->cursor_pos) {
+          SDL_Rect dest;
+          dest.x = x;
+          dest.y = y;
+          dest.w = font_w;
+          dest.h = font_h;
+          render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
+          cursor_rendered = true;
+        }
+
+        SDL_Surface *surface =
+            TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+        SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+        int w = sr.surface->w;
+        SR_render_fullsize_and_destroy(&sr, x, y);
+        x += w;
       }
 
-      if (i == mainBuffer->cursor_pos) {
+      if (!cursor_rendered && line == mainBuffer->cursor_line) {
         SDL_Rect dest;
         dest.x = x;
         dest.y = y;
         dest.w = font_w;
         dest.h = font_h;
+
         render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
-        cursor_rendered = true;
       }
 
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-      int w = sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-      x += w;
-    }
-
-    if (!cursor_rendered) {
-      SDL_Rect dest;
-      dest.x = x;
-      dest.y = y;
-      dest.w = font_w;
-      dest.h = font_h;
-
-      render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
+      y += font_h;
+      x = margin_x;
     }
   }
 
@@ -336,17 +413,28 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   if (state->mode == AppMode_ex) {
-    char *text = (char *)pushSize(&transientState->arena,
-                                  strlen(exBuffer->text) + 1, DEFAULT_ALIGMENT);
-    sprintf(text, ":%s", exBuffer->text);
+    assert(exBuffer->line->next == NULL);
 
-    SDL_Surface *text_surface =
-        TTF_cpointer(TTF_RenderText_Solid(state->font, text, sdlFontColor));
+    int x = 0.01 * buffer->width;
+    int y = buffer->height - font_h - 0.01 * buffer->height;
 
-    SurfaceRenderer sr = SR_create(buffer->renderer, text_surface);
-    SR_render_fullsize_and_destroy(&sr, 0.01 * buffer->width,
-                                   buffer->height - text_surface->h -
-                                       0.01 * buffer->height);
+    {
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', sdlFontColor));
+      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+      x += sr.surface->w;
+      SR_render_fullsize_and_destroy(&sr, x, y);
+    }
+
+    for (uint64 i = 0; i < exBuffer->line->size; ++i) {
+      uint16 ch = exBuffer->line->text[i];
+
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+      x += sr.surface->w;
+      SR_render_fullsize_and_destroy(&sr, x, y);
+    }
   }
 
 #if DEBUG_WINDOW
@@ -354,8 +442,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     char *text =
         (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
     SDL_Color color = {UNHEX(debugFontColor)};
-    sprintf(text, "Cursor position: %lu\nText length: %lu",
-            mainBuffer->cursor_pos, strlen(mainBuffer->text));
+    sprintf(text, "Cursor position: %d\n", mainBuffer->cursor_pos);
 
     const int margin_x = buffer->width * 0.01;
     const int margin_y = buffer->height * 0.01;
