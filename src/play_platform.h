@@ -32,10 +32,6 @@ typedef double real64;
 #include <SDL2/SDL.h>
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
-#define align4(value) ((value + 3) & ~3)
-#define align8(value) ((value + 7) & ~7)
-#define align16(value) ((value + 15) & ~15)
-#define BITMAP_BYTES_PER_PIXEL 4
 
 #define Kilobytes(Value) ((Value)*1024LL)
 #define Megabytes(Value) (Kilobytes(Value) * 1024LL)
