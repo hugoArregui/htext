@@ -98,20 +98,4 @@ typedef struct Code {
   bool32 isValid;
 } Code;
 
-inline uint16 safeTruncateToUint16(int32 value) {
-  assert(value <= 65535);
-  assert(value >= 0);
-
-  uint16 result = (uint16)value;
-  return result;
-}
-
-inline int16 safeTruncateToInt16(int32 value) {
-  // TODO(casey): Defines for maximum values
-  assert(value < 32767);
-  assert(value >= -32768);
-  int16 result = (int16)value;
-  return result;
-}
-
 #endif
