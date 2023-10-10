@@ -133,6 +133,7 @@ typedef struct {
   EditorBuffer exBuffer;
 
   TTF_Font *font;
+  int32 font_h;
 } State;
 
 #define __PLAY_PLAY

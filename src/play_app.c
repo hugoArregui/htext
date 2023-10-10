@@ -86,6 +86,52 @@ bool32 line_eq(Line *line, char *str) {
   return strncmp(line->text, str, line->size) == 0;
 }
 
+void eb_render(State *state, SDL_Renderer *renderer, EditorBuffer *mainBuffer,
+               int x_start, int y_start, bool32 cursor_active) {
+  int x = x_start;
+  int y = y_start;
+
+  const int cursor_w = state->font_h / 2;
+  bool32 cursor_rendered = false;
+
+  SDL_Color sdlFontColor = {UNHEX(fontColor)};
+  for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
+    for (uint64 i = 0; i < line->size; ++i) {
+      uint32 ch = line->text[i];
+
+      if (line == mainBuffer->cursor_line && i == mainBuffer->cursor_pos) {
+        SDL_Rect dest;
+        dest.x = x;
+        dest.y = y;
+        dest.w = cursor_w;
+        dest.h = state->font_h;
+        render_cursor(renderer, dest, cursor_active);
+        cursor_rendered = true;
+      }
+
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+      SurfaceRenderer sr = SR_create(renderer, surface);
+      int w = sr.surface->w;
+      SR_render_fullsize_and_destroy(&sr, x, y);
+      x += w;
+    }
+
+    if (!cursor_rendered && line == mainBuffer->cursor_line) {
+      SDL_Rect dest;
+      dest.x = x;
+      dest.y = y;
+      dest.w = cursor_w;
+      dest.h = state->font_h;
+
+      render_cursor(renderer, dest, cursor_active);
+    }
+
+    y += state->font_h;
+    x = x_start;
+  }
+}
+
 EditorBuffer eb_create(MemoryArena *arena) {
   Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
   line->max_size = 200;
@@ -126,8 +172,20 @@ void eb_new_line(MemoryArena *arena, EditorBuffer *buffer) {
     new_line->text =
         (char *)pushSize(arena, new_line->max_size, DEFAULT_ALIGMENT);
   }
-  new_line->size = 0;
+
+  if (buffer->cursor_pos < buffer->cursor_line->size) {
+    new_line->size = buffer->cursor_line->size - buffer->cursor_pos;
+    memcpy(new_line->text, buffer->line->text + buffer->cursor_pos,
+           new_line->size);
+    buffer->cursor_line->size = buffer->cursor_pos;
+  } else {
+    new_line->size = 0;
+  }
+
   new_line->next = buffer->cursor_line->next;
+  if (new_line->next != NULL) {
+    new_line->next->prev = new_line;
+  }
   new_line->prev = buffer->cursor_line;
   buffer->cursor_line->next = new_line;
   buffer->cursor_line = new_line;
@@ -178,7 +236,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
   SDL_Color sdlModeColor = {UNHEX(0xFF000000)};
-  SDL_Color sdlFontColor = {UNHEX(fontColor)};
 
 #if DEBUG_WINDOW
   uint32 debugBackgroundColor = 0xFFFFFFFF;
@@ -198,6 +255,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     // NOTE: this is executed once
     state->font = TTF_cpointer(
         TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
+
+    state->font_h = TTF_FontHeight(state->font);
 
     initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                     (uint8 *)memory->permanentStorage + sizeof(State));
@@ -334,54 +393,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // -------- rendering
-  const int font_h = TTF_FontHeight(state->font);
-  {
-    // render main buffer
-    const int font_w = font_h / 2;
-
-    const int margin_x = buffer->width * 0.01;
-
-    int x = margin_x;
-    int y = buffer->height * 0.01;
-
-    bool32 cursor_rendered = false;
-
-    for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
-      for (uint64 i = 0; i < line->size; ++i) {
-        uint32 ch = line->text[i];
-
-        if (line == mainBuffer->cursor_line && i == mainBuffer->cursor_pos) {
-          SDL_Rect dest;
-          dest.x = x;
-          dest.y = y;
-          dest.w = font_w;
-          dest.h = font_h;
-          render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
-          cursor_rendered = true;
-        }
-
-        SDL_Surface *surface =
-            TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-        SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-        int w = sr.surface->w;
-        SR_render_fullsize_and_destroy(&sr, x, y);
-        x += w;
-      }
-
-      if (!cursor_rendered && line == mainBuffer->cursor_line) {
-        SDL_Rect dest;
-        dest.x = x;
-        dest.y = y;
-        dest.w = font_w;
-        dest.h = font_h;
-
-        render_cursor(buffer->renderer, dest, state->mode != AppMode_ex);
-      }
-
-      y += font_h;
-      x = margin_x;
-    }
-  }
+  // render main buffer
+  eb_render(state, buffer->renderer, mainBuffer, buffer->width * 0.01,
+            buffer->height * 0.01, state->mode != AppMode_ex);
 
   // render mode name
   {
@@ -417,25 +431,18 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     assert(exBuffer->line->next == NULL);
 
     int x = 0.01 * buffer->width;
-    int y = buffer->height - font_h - 0.01 * buffer->height;
+    int y = buffer->height - state->font_h - 0.01 * buffer->height;
 
-    {
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', sdlFontColor));
-      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-      x += sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-    }
+    // first render ':'
+    SDL_Color sdlFontColor = {UNHEX(fontColor)};
+    SDL_Surface *surface =
+        TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', sdlFontColor));
+    SurfaceRenderer sr = SR_create(buffer->renderer, surface);
+    SR_render_fullsize_and_destroy(&sr, x, y);
+    x += sr.surface->w;
 
-    for (uint64 i = 0; i < exBuffer->line->size; ++i) {
-      uint16 ch = exBuffer->line->text[i];
-
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
-      SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-      x += sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-    }
+    eb_render(state, buffer->renderer, exBuffer, x, y,
+              state->mode == AppMode_ex);
   }
 
 #if DEBUG_WINDOW
