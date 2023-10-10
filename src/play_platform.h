@@ -44,12 +44,12 @@ typedef double real64;
 
 #define DEBUG_WINDOW 0
 
-typedef struct PlatformState {
+typedef struct {
   uint64 totalSize;
   void *gameMemoryBlock;
 } PlatformState;
 
-typedef struct SdlOffscreenBuffer {
+typedef struct {
   SDL_Renderer *renderer;
 #ifdef DEBUG_WINDOW
   SDL_Renderer *debugRenderer;
@@ -59,7 +59,7 @@ typedef struct SdlOffscreenBuffer {
   int height;
 } SdlOffscreenBuffer;
 
-typedef struct Memory {
+typedef struct {
   uint64 permanentStorageSize;
   void *permanentStorage; // NOTE(casey): REQUIRED to be cleared to zero at
                           // startup
@@ -69,7 +69,7 @@ typedef struct Memory {
                           // startup
 } Memory;
 
-typedef struct Input {
+typedef struct {
   real32 dtForFrame;
   bool32 executableReloaded;
   int keypressed;
@@ -89,7 +89,7 @@ typedef UPDATE_AND_RENDER(update_and_render);
   ((color) >> (8 * 0)) & 0xFF
 // clang-format on
 
-typedef struct Code {
+typedef struct {
   void *handler;
   // IMPORTANT(casey): Either of the callbacks can be 0!  You must
   // check before calling.

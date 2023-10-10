@@ -4,19 +4,19 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 
-typedef struct MemoryArena {
+typedef struct {
   memory_index size;
   uint8 *base;
   memory_index used;
   int32 tempCount;
 } MemoryArena;
 
-typedef struct TemporaryMemory {
+typedef struct {
   memory_index used;
   MemoryArena *arena;
 } TemporaryMemory;
 
-typedef struct TransientState {
+typedef struct {
   bool32 isInitialized;
   MemoryArena arena;
 } TransientState;
@@ -116,14 +116,14 @@ typedef struct Line {
   struct Line *next;
 } Line;
 
-typedef struct EditorBuffer {
+typedef struct {
   Line* line;
   Line* deleted_line;
   Line* cursor_line;
   uint32 cursor_pos;
 } EditorBuffer;
 
-typedef struct State {
+typedef struct {
   int isInitialized;
   enum AppMode mode;
 
