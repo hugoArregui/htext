@@ -51,21 +51,11 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
     prev_line = line;
   }
 
-  prev_line = NULL;
   for (Line *line = mainBuffer->deleted_line; line != NULL; line = line->next) {
-    if (line->size > 0) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->size == 0);
-    }
     if (line->max_size == 0) {
       printf("%s:%d\n", file, linenum);
       assert(line->max_size > 0);
     }
-    if (line->prev != prev_line) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->prev == prev_line);
-    }
-    prev_line = line;
   }
 }
 #else
@@ -84,6 +74,18 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
 
 bool32 line_eq(Line *line, char *str) {
   return strncmp(line->text, str, line->size) == 0;
+}
+
+void line_insert_next(Line *line, Line *next_line) {
+  assert(line != NULL);
+  assert(next_line != NULL);
+
+  next_line->next = line->next;
+  next_line->prev = line;
+  if (next_line->next != NULL) {
+    next_line->next->prev = next_line;
+  }
+  line->next = next_line;
 }
 
 void eb_render(State *state, SDL_Renderer *renderer, EditorBuffer *mainBuffer,
@@ -160,12 +162,6 @@ void eb_new_line(MemoryArena *arena, EditorBuffer *buffer) {
   if (buffer->deleted_line != NULL) {
     new_line = buffer->deleted_line;
     buffer->deleted_line = buffer->deleted_line->next;
-    if (buffer->deleted_line != NULL) {
-      buffer->deleted_line->prev = NULL;
-      if (buffer->deleted_line->next != NULL) {
-        buffer->deleted_line->next->prev = buffer->deleted_line;
-      }
-    }
   } else {
     new_line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
     new_line->max_size = 200;
@@ -182,12 +178,7 @@ void eb_new_line(MemoryArena *arena, EditorBuffer *buffer) {
     new_line->size = 0;
   }
 
-  new_line->next = buffer->cursor_line->next;
-  if (new_line->next != NULL) {
-    new_line->next->prev = new_line;
-  }
-  new_line->prev = buffer->cursor_line;
-  buffer->cursor_line->next = new_line;
+  line_insert_next(buffer->cursor_line, new_line);
   buffer->cursor_line = new_line;
   buffer->cursor_pos = 0;
 }
@@ -214,11 +205,8 @@ void eb_remove_char(EditorBuffer *buffer) {
         buffer->cursor_line->size += line_to_remove->size;
       }
 
-      line_to_remove->size = 0;
-      line_to_remove->next = buffer->deleted_line;
-      line_to_remove->prev = NULL;
       if (buffer->deleted_line != NULL) {
-        buffer->deleted_line->prev = line_to_remove;
+        line_insert_next(line_to_remove, buffer->deleted_line);
       }
       buffer->deleted_line = line_to_remove;
     }

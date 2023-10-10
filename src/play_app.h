@@ -118,6 +118,8 @@ typedef struct Line {
 
 typedef struct {
   Line* line;
+
+  // IMPORTANT: this is not a double link list, only next pointers are valid
   Line* deleted_line;
   Line* cursor_line;
   uint32 cursor_pos;
