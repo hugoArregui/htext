@@ -1,6 +1,7 @@
 #include "play_app.h"
 #include "play_la.h"
 #include "play_sdl.h"
+#include <SDL2/SDL_blendmode.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
@@ -17,7 +18,6 @@
 // TODO better debug logging
 // TODO cursor for ex
 // TODO load and write file
-// TODO cursor is not transparent
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
@@ -73,6 +73,7 @@ void _assert_line_integrity(State *state, char *file, int linenum);
 #endif
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
+  SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
   SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
   if (fill) {
     SDL_ccode(SDL_RenderFillRect(renderer, &dest));
