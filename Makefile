@@ -2,9 +2,8 @@ OPTIMIZATIONS=-O3
 DEBUG=-ggdb3
 CC=clang
 
-CFLAGS=-Wall -Wextra -std=c11 -pedantic -ggdb -Wno-gnu-empty-initializer `pkg-config --cflags sdl2`
+CFLAGS=-Wall -Wextra -std=c17 -pedantic -ggdb -Wno-gnu-empty-initializer `pkg-config --cflags sdl2`
 LIBS=`pkg-config --libs sdl2 SDL2_ttf SDL2_image`
-
 
 build: clean
 	mkdir -p build/
