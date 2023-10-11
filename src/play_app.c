@@ -18,6 +18,7 @@
 // TODO better debug logging
 // TODO cursor for ex
 // TODO load and write file
+// TODO playback
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
@@ -27,19 +28,34 @@ const uint32 backgroundColor = 0x00000000;
 const uint32 fontColor = 0xFFFFFF00;
 const uint32 cursorColor = fontColor | 0x9F;
 
+// NOTE: I use this commented code to set a breakpoint when an assert is
+// triggered
+/* #define assert(cond) my_assert(cond, __FILE__, __LINE__) */
+/* void my_assert(bool32 cond, char *file, int linenum) { */
+/*   if (!cond) { */
+/*     printf("%s:%d\n", file, linenum); */
+/*     exit(1); */
+/*   } */
+/* } */
+
 #define ASSERT_LINE_INTEGRITY 1
 
 #if ASSERT_LINE_INTEGRITY
 #define assert_line_integrity(state)                                           \
   _assert_line_integrity(state, __FILE__, __LINE__)
-void _assert_line_integrity(State *state, char *file, int linenum) {
-  assert(state->exBuffer.line->next == NULL);
-  assert(state->exBuffer.deleted_line == NULL);
 
-  EditorBuffer *mainBuffer = &state->mainBuffer;
-
+void assert_main_buffer_integrity(EditorBuffer *mainBuffer, char *file,
+                                  int linenum) {
   Line *prev_line = NULL;
   for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
+    if (line->prev == line) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->prev != line);
+    }
+    if (line->next == line) {
+      printf("%s:%d\n", file, linenum);
+      assert(line->next != line);
+    }
     if (line->prev != prev_line) {
       printf("%s:%d\n", file, linenum);
       assert(line->prev == prev_line);
@@ -47,6 +63,13 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
     if (line->max_size == 0) {
       printf("%s:%d\n", file, linenum);
       assert(line->max_size > 0);
+    }
+
+    for (uint32 i = 0; i < line->size; ++i) {
+      if (line->text[i] < 32) {
+        printf("%s:%d\n", file, linenum);
+        assert(line->text[i] > 32);
+      }
     }
     prev_line = line;
   }
@@ -57,6 +80,13 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
       assert(line->max_size > 0);
     }
   }
+}
+
+void _assert_line_integrity(State *state, char *file, int linenum) {
+  assert(state->exBuffer.line->next == NULL);
+  assert(state->exBuffer.deleted_line == NULL);
+
+  assert_main_buffer_integrity(&state->mainBuffer, file, linenum);
 }
 #else
 void _assert_line_integrity(State *state, char *file, int linenum);
@@ -79,6 +109,7 @@ bool32 line_eq(Line *line, char *str) {
 void line_insert_next(Line *line, Line *next_line) {
   assert(line != NULL);
   assert(next_line != NULL);
+  assert(line != next_line);
 
   next_line->next = line->next;
   next_line->prev = line;
@@ -100,7 +131,6 @@ void eb_render(State *state, SDL_Renderer *renderer, EditorBuffer *mainBuffer,
   for (Line *line = mainBuffer->line; line != NULL; line = line->next) {
     for (uint64 i = 0; i < line->size; ++i) {
       uint32 ch = line->text[i];
-
       if (line == mainBuffer->cursor_line && i == mainBuffer->cursor_pos) {
         SDL_Rect dest;
         dest.x = x;
@@ -113,6 +143,7 @@ void eb_render(State *state, SDL_Renderer *renderer, EditorBuffer *mainBuffer,
 
       SDL_Surface *surface =
           TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+
       SurfaceRenderer sr = SR_create(renderer, surface);
       int w = sr.surface->w;
       SR_render_fullsize_and_destroy(&sr, x, y);
@@ -206,6 +237,8 @@ void eb_remove_char(EditorBuffer *buffer) {
       }
 
       if (buffer->deleted_line != NULL) {
+        line_to_remove->next = NULL;
+        line_to_remove->prev = NULL;
         line_insert_next(line_to_remove, buffer->deleted_line);
       }
       buffer->deleted_line = line_to_remove;
