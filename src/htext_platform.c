@@ -1,7 +1,8 @@
-#include "play_platform.h"
-#include "play_sdl.h"
+#include "htext_platform.h"
+#include "htext_sdl.h"
 #include <SDL.h>
 #include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_video.h>
 #include <SDL_keycode.h>
 #include <SDL_ttf.h>
 #include <dlfcn.h>
@@ -54,7 +55,7 @@ void unloadGameCode(Code *code) {
 }
 
 int main(void) {
-  const char *libSourcePath = "/home/hugo/workspace/play/build/play.so";
+  const char *libSourcePath = "/home/hugo/workspace/htext/build/htext.so";
 
   uint64 permanentStorageSize = Megabytes(256);
   uint64 transientStorageSize = Gigabytes(3);

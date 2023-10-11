@@ -1,6 +1,6 @@
-#include "play_app.h"
-#include "play_la.h"
-#include "play_sdl.h"
+#include "htext_app.h"
+#include "htext_la.h"
+#include "htext_sdl.h"
 #include <SDL2/SDL_blendmode.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
@@ -17,7 +17,7 @@
 
 // TODO load and write file
 // TODO better debug logging
-// TODO playback
+// TODO htextback
 // TODO rename
 // TODO review include strategy for c files: single CU?
 

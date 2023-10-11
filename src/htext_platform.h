@@ -1,6 +1,6 @@
 #include <SDL2/SDL_render.h>
-#ifndef __PLAY_MAIN
-#define __PLAY_MAIN
+#ifndef __H_TEXT_MAIN
+#define __H_TEXT_MAIN
 
 #include <assert.h>
 #include <dirent.h>

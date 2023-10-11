@@ -1,5 +1,5 @@
-#include "play_app.c"
-#include "play_app.h"
+#include "htext_app.c"
+#include "htext_app.h"
 #include <sys/mman.h>
 
 int main(void) {

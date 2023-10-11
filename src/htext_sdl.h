@@ -1,5 +1,5 @@
-#ifndef __PLAY_SDL
-#define __PLAY_SDL
+#ifndef __H_TEXT_SDL
+#define __H_TEXT_SDL
 
 #include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_render.h>

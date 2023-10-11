@@ -7,13 +7,13 @@ LIBS=`pkg-config --libs sdl2 SDL2_ttf SDL2_image`
 
 build: clean
 	mkdir -p build/
-	$(CC) -fPIC $(CFLAGS) -shared src/play_app.c src/play_sdl.c -o build/play.so $(LIBS)
-	$(CC) $(CFLAGS) $(DEBUG) -o build/play src/play_platform.c src/play_sdl.c $(LIBS)
-
+	$(CC) -fPIC $(CFLAGS) -shared src/htext_app.c src/htext_sdl.c -o build/htext.so $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c src/htext_sdl.c $(LIBS)
 
 test: clean
 	mkdir -p build/
-	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c src/play_sdl.c $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c src/htext_sdl.c $(LIBS)
+	./build/tests
 
 clean:
 	rm -f build/*

@@ -1,6 +1,6 @@
-#ifndef __PLAY_PLAY
+#ifndef __H_TEXT_H_TEXT
 
-#include "play_platform.h"
+#include "htext_platform.h"
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 
@@ -138,5 +138,5 @@ typedef struct {
   int32 font_h;
 } State;
 
-#define __PLAY_PLAY
+#define __H_TEXT_H_TEXT
 #endif
