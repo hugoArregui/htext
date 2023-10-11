@@ -10,5 +10,10 @@ build: clean
 	$(CC) -fPIC $(CFLAGS) -shared src/play_app.c src/play_sdl.c -o build/play.so $(LIBS)
 	$(CC) $(CFLAGS) $(DEBUG) -o build/play src/play_platform.c src/play_sdl.c $(LIBS)
 
+
+test: clean
+	mkdir -p build/
+	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c src/play_sdl.c $(LIBS)
+
 clean:
 	rm -f build/*
