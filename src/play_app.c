@@ -15,10 +15,11 @@
 #include <string.h>
 #include <sys/types.h>
 
-// TODO better debug logging
-// TODO cursor for ex
 // TODO load and write file
+// TODO better debug logging
 // TODO playback
+// TODO rename
+// TODO review include strategy for c files: single CU?
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
