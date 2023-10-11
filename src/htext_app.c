@@ -17,9 +17,7 @@
 
 // TODO load and write file
 // TODO better debug logging
-// TODO htextback
-// TODO rename
-// TODO review include strategy for c files: single CU?
+// TODO playback
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
