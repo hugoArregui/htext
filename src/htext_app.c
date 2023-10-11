@@ -252,6 +252,55 @@ void eb_remove_char(EditorBuffer *buffer) {
   }
 }
 
+#if DEBUG_RECORDING
+int poll_event(Input *input, SDL_Event *event) {
+  int pending_event = SDL_PollEvent(event);
+  if (pending_event) {
+    switch (event->type) {
+    case SDL_KEYDOWN:
+      // 1 means keydown
+      assert(fputc(1, input->playbackFile) != EOF);
+      assert(fputc(event->key.keysym.scancode, input->playbackFile) != EOF);
+    case SDL_TEXTINPUT:
+      // 2 means text input
+      assert(fputc(2, input->playbackFile) != EOF);
+      assert(fputc(strlen(event->text.text), input->playbackFile) != EOF);
+      for (size_t x = 0; x < strlen(event->text.text); ++x) {
+        assert(fputc(event->text.text[x], input->playbackFile) != EOF);
+      }
+    }
+    assert(fflush(input->playbackFile) == 0);
+  }
+  return pending_event;
+}
+#elif DEBUG_PLAYBACK
+int poll_event(Input *input, SDL_Event *event) {
+  int proto = fgetc(input->playbackFile);
+  if (proto == EOF) {
+    return SDL_PollEvent(event);
+  } else {
+    if (proto == 1) {
+      event->type = SDL_KEYDOWN;
+      int code = fgetc(input->playbackFile);
+      assert(code != EOF);
+      event->key.keysym.scancode = code;
+    } else if (proto == 2) {
+      int len = fgetc(input->playbackFile);
+      event->type = SDL_TEXTINPUT;
+      for (int i = 0; i < len; ++i) {
+        event->text.text[i] = fgetc(input->playbackFile);
+      }
+      event->text.text[len] = '\0';
+    } else {
+      assert(false);
+    }
+    return 1;
+  }
+}
+#else
+int poll_event(Input *input, SDL_Event *event) { return SDL_PollEvent(event); }
+#endif
+
 extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
@@ -306,7 +355,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   EditorBuffer *exBuffer = &state->exBuffer;
 
   SDL_Event event;
-  while (SDL_PollEvent(&event)) {
+  while (poll_event(input, &event)) {
     switch (event.type) {
     case SDL_KEYDOWN:
       switch (state->mode) {

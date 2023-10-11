@@ -39,6 +39,8 @@ typedef double real64;
 #define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
 #define DEBUG_WINDOW 0
+#define DEBUG_RECORDING 0
+#define DEBUG_PLAYBACK 1
 
 typedef struct {
   uint64 totalSize;
@@ -71,6 +73,10 @@ typedef struct {
   int keypressed;
 
   char text[32];
+
+#if DEBUG_RECORDING || DEBUG_PLAYBACK
+  FILE* playbackFile;
+#endif
 } Input;
 
 #define UPDATE_AND_RENDER(name)                                                \

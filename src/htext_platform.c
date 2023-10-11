@@ -14,7 +14,6 @@
 
 #define DEBUG_FPS 0
 #define DEBUG 1
-#define DEBUG_LOAD 0
 
 int getGameLastModificationDate(const char *path, struct stat *fileStat,
                                 time_t *modificationTime) {
@@ -22,9 +21,6 @@ int getGameLastModificationDate(const char *path, struct stat *fileStat,
     *modificationTime = fileStat->st_mtime;
     return 0;
   } else {
-#if DEBUG_LOAD
-    printf("failed to get file last modification time %s\n", strerror(errno));
-#endif
     return -1;
   }
 }
@@ -55,7 +51,7 @@ void unloadGameCode(Code *code) {
 }
 
 int main(void) {
-  const char *libSourcePath = "/home/hugo/workspace/htext/build/htext.so";
+  const char *libSourcePath = "build/htext.so";
 
   uint64 permanentStorageSize = Megabytes(256);
   uint64 transientStorageSize = Gigabytes(3);
@@ -120,6 +116,14 @@ int main(void) {
 
   Input input = {};
   input.dtForFrame = targetSecondsPerFrame;
+
+#if DEBUG_RECORDING
+  input.playbackFile = fopen("playback", "w");
+  assert(input.playbackFile != NULL);
+#elif DEBUG_PLAYBACK
+  input.playbackFile = fopen("playback", "r");
+  assert(input.playbackFile != NULL);
+#endif
   Code code = {};
   loadGameCode(libSourcePath, &code);
 
@@ -202,6 +206,12 @@ int main(void) {
   SDL_DestroyRenderer(debugRenderer);
   SDL_DestroyWindow(debugWindow);
 #endif
+
+#if DEBUG_RECORDING || DEBUG_PLAYBACK
+  fclose(input.playbackFile);
+#endif
+
+
   SDL_Quit();
 
   munmap(platformState.gameMemoryBlock, platformState.totalSize);
