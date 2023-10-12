@@ -18,6 +18,7 @@
 // TODO load and write file
 // TODO better debug logging
 // TODO playback
+// TODO editorbuffer -> frame?
 
 const char *normalModeName = "NORMAL";
 const char *exModeName = "EX";
@@ -252,49 +253,23 @@ void eb_remove_char(EditorBuffer *buffer) {
   }
 }
 
-#if DEBUG_RECORDING
+#if DEBUG_PLAYBACK == PLAYBACK_RECORDING
 int poll_event(Input *input, SDL_Event *event) {
   int pending_event = SDL_PollEvent(event);
   if (pending_event) {
-    switch (event->type) {
-    case SDL_KEYDOWN:
-      // 1 means keydown
-      assert(fputc(1, input->playbackFile) != EOF);
-      assert(fputc(event->key.keysym.scancode, input->playbackFile) != EOF);
-    case SDL_TEXTINPUT:
-      // 2 means text input
-      assert(fputc(2, input->playbackFile) != EOF);
-      assert(fputc(strlen(event->text.text), input->playbackFile) != EOF);
-      for (size_t x = 0; x < strlen(event->text.text); ++x) {
-        assert(fputc(event->text.text[x], input->playbackFile) != EOF);
-      }
-    }
+    // NOTE: this is insane
+    assert(fwrite(event, sizeof(SDL_Event), 1, input->playbackFile) == 1);
     assert(fflush(input->playbackFile) == 0);
   }
   return pending_event;
 }
-#elif DEBUG_PLAYBACK
+#elif DEBUG_PLAYBACK == PLAYBACK_PLAYING
 int poll_event(Input *input, SDL_Event *event) {
-  int proto = fgetc(input->playbackFile);
-  if (proto == EOF) {
-    return SDL_PollEvent(event);
-  } else {
-    if (proto == 1) {
-      event->type = SDL_KEYDOWN;
-      int code = fgetc(input->playbackFile);
-      assert(code != EOF);
-      event->key.keysym.scancode = code;
-    } else if (proto == 2) {
-      int len = fgetc(input->playbackFile);
-      event->type = SDL_TEXTINPUT;
-      for (int i = 0; i < len; ++i) {
-        event->text.text[i] = fgetc(input->playbackFile);
-      }
-      event->text.text[len] = '\0';
-    } else {
-      assert(false);
-    }
+  int read_size = fread(event, sizeof(SDL_Event), 1, input->playbackFile);
+  if (read_size == 1) {
     return 1;
+  } else {
+    return SDL_PollEvent(event);
   }
 }
 #else

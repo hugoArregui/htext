@@ -117,10 +117,10 @@ int main(void) {
   Input input = {};
   input.dtForFrame = targetSecondsPerFrame;
 
-#if DEBUG_RECORDING
+#if DEBUG_PLAYBACK == PLAYBACK_RECORDING
   input.playbackFile = fopen("playback", "w");
   assert(input.playbackFile != NULL);
-#elif DEBUG_PLAYBACK
+#elif DEBUG_PLAYBACK == PLAYBACK_PLAYING
   input.playbackFile = fopen("playback", "r");
   assert(input.playbackFile != NULL);
 #endif
@@ -207,7 +207,7 @@ int main(void) {
   SDL_DestroyWindow(debugWindow);
 #endif
 
-#if DEBUG_RECORDING || DEBUG_PLAYBACK
+#if DEBUG_PLAYBACK == PLAYBACK_PLAYING || DEBUG_PLAYBACK == PLAYBACK_RECORDING
   fclose(input.playbackFile);
 #endif
 
