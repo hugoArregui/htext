@@ -272,7 +272,10 @@ int poll_event(Input *input, SDL_Event *event) {
   }
 }
 #else
-int poll_event(Input *input, SDL_Event *event) { return SDL_PollEvent(event); }
+int poll_event(Input *input, SDL_Event *event) {
+  (void)(input); // avoid unused parameter warning
+  return SDL_PollEvent(event);
+}
 #endif
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
