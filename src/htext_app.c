@@ -137,7 +137,7 @@ void line_insert_next(Line *line, Line *next_line) {
 }
 
 void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
-                  int x_start, int y_start, int h, bool32 cursor_active) {
+                  int x_start, int y_start, int h, bool32 is_cursor_active) {
   int x = x_start;
   int y = y_start;
 
@@ -151,9 +151,28 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
   Line *end_line = NULL;
 
   if (lines_to_render < frame->line_count) {
-    end_line = start_line;
-    for (uint32 i = 0; i < lines_to_render; ++i) {
-      end_line = end_line->next;
+    uint32 cursor_line_num = 0;
+    for (Line *line = frame->line; line != frame->cursor_line;
+         line = line->next) {
+      cursor_line_num++;
+    }
+
+    int64 start_line_num = cursor_line_num - (lines_to_render / 2);
+    if (start_line_num < 0) {
+      start_line_num = 0;
+    }
+    int64 end_line_num = start_line_num + lines_to_render;
+
+    int64 i = 0;
+    for (Line *line = frame->line; line != frame->cursor_line;
+         line = line->next) {
+      if (i == start_line_num) {
+        start_line = line;
+      } else if (i == end_line_num) {
+        end_line = line;
+        break;
+      }
+      ++i;
     }
   }
 
@@ -166,7 +185,7 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
         dest.y = y;
         dest.w = cursor_w;
         dest.h = state->font_h;
-        render_cursor(renderer, dest, cursor_active);
+        render_cursor(renderer, dest, is_cursor_active);
         cursor_rendered = true;
       }
 
@@ -186,7 +205,7 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
       dest.w = cursor_w;
       dest.h = state->font_h;
 
-      render_cursor(renderer, dest, cursor_active);
+      render_cursor(renderer, dest, is_cursor_active);
     }
 
     y += state->font_h;
