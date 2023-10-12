@@ -44,7 +44,10 @@ const uint32 cursorColor = fontColor | 0x9F;
 
 void assert_main_frame_integrity(Frame *main_frame, char *file, int linenum) {
   Line *prev_line = NULL;
+
+  uint32 total_lines = 0;
   for (Line *line = main_frame->line; line != NULL; line = line->next) {
+    total_lines++;
     if (line->prev == line) {
       printf("%s:%d\n", file, linenum);
       assert(line->prev != line);
@@ -71,6 +74,8 @@ void assert_main_frame_integrity(Frame *main_frame, char *file, int linenum) {
     prev_line = line;
   }
 
+  assert(total_lines == main_frame->line_count);
+
   for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
     if (line->max_size == 0) {
       printf("%s:%d\n", file, linenum);
@@ -88,6 +93,21 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
 #else
 void _assert_line_integrity(State *state, char *file, int linenum);
 #endif
+
+const char *state_get_mode_name(State *state) {
+  switch (state->mode) {
+  case AppMode_normal:
+    return normalModeName;
+  case AppMode_ex:
+    return exModeName;
+  case AppMode_insert:
+    return insertModeName;
+  default: {
+    assert(false);
+    break;
+  }
+  }
+}
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
@@ -116,8 +136,8 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-void frame_render(State *state, SDL_Renderer *renderer, Frame *main_frame,
-                  int x_start, int y_start, bool32 cursor_active) {
+void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
+                  int x_start, int y_start, int h, bool32 cursor_active) {
   int x = x_start;
   int y = y_start;
 
@@ -125,10 +145,22 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *main_frame,
   bool32 cursor_rendered = false;
 
   SDL_Color sdlFontColor = {UNHEX(fontColor)};
-  for (Line *line = main_frame->line; line != NULL; line = line->next) {
+
+  uint32 lines_to_render = h / state->font_h;
+  Line *start_line = frame->line;
+  Line *end_line = NULL;
+
+  if (lines_to_render < frame->line_count) {
+    end_line = start_line;
+    for (uint32 i = 0; i < lines_to_render; ++i) {
+      end_line = end_line->next;
+    }
+  }
+
+  for (Line *line = start_line; line != end_line; line = line->next) {
     for (uint64 i = 0; i < line->size; ++i) {
       uint32 ch = line->text[i];
-      if (line == main_frame->cursor_line && i == main_frame->cursor_pos) {
+      if (line == frame->cursor_line && i == frame->cursor_pos) {
         SDL_Rect dest;
         dest.x = x;
         dest.y = y;
@@ -147,7 +179,7 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *main_frame,
       x += w;
     }
 
-    if (!cursor_rendered && line == main_frame->cursor_line) {
+    if (!cursor_rendered && line == frame->cursor_line) {
       SDL_Rect dest;
       dest.x = x;
       dest.y = y;
@@ -169,20 +201,19 @@ Frame frame_create(MemoryArena *arena) {
   line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
   line->prev = NULL;
   line->next = NULL;
-  return (Frame){.line = line, .cursor_line = line, .cursor_pos = 0};
+  return (Frame){
+      .line = line, .cursor_line = line, .cursor_pos = 0, .line_count = 1};
 }
 
-void frame_insert_text(Frame *frame, char *text) {
-  uint64 text_len = strlen(text);
-
+void frame_insert_text(Frame *frame, char *text, uint32 text_size) {
   Line *line = frame->cursor_line;
 
-  assert(line->max_size >= (line->size + text_len));
-  memcpy(line->text + frame->cursor_pos + text_len,
+  assert(line->max_size >= (line->size + text_size));
+  memcpy(line->text + frame->cursor_pos + text_size,
          line->text + frame->cursor_pos, line->size - frame->cursor_pos);
-  memcpy(line->text + frame->cursor_pos, text, text_len);
-  line->size += text_len;
-  frame->cursor_pos += text_len;
+  memcpy(line->text + frame->cursor_pos, text, text_size);
+  line->size += text_size;
+  frame->cursor_pos += text_size;
 }
 
 void frame_insert_new_line(MemoryArena *arena, Frame *frame) {
@@ -209,6 +240,7 @@ void frame_insert_new_line(MemoryArena *arena, Frame *frame) {
   line_insert_next(frame->cursor_line, new_line);
   frame->cursor_line = new_line;
   frame->cursor_pos = 0;
+  frame->line_count++;
 }
 
 void frame_remove_char(Frame *frame) {
@@ -222,6 +254,7 @@ void frame_remove_char(Frame *frame) {
       if (frame->cursor_line->next != NULL) {
         frame->cursor_line->next->prev = frame->cursor_line;
       }
+      frame->line_count--;
 
       frame->cursor_pos = frame->cursor_line->size;
       if (line_to_remove->size > 0) {
@@ -275,6 +308,29 @@ int poll_event(Input *input, SDL_Event *event) {
   return SDL_PollEvent(event);
 }
 #endif
+
+int load_file(State *state) {
+  FILE *f = fopen("src/htext_app.c", "r");
+  if (!f) {
+    return -1;
+  }
+
+  // TODO clear main_frame first
+  char c;
+  int read_size = fread(&c, sizeof(char), 1, f);
+  while (read_size > 0) {
+    if (c == '\n') {
+      frame_insert_new_line(&state->arena, &state->main_frame);
+    } else {
+      frame_insert_text(&state->main_frame, &c, 1);
+    }
+    read_size = fread(&c, sizeof(char), 1, f);
+  }
+
+  state->main_frame.cursor_line = state->main_frame.line;
+  state->main_frame.cursor_pos = 0;
+  return 0;
+}
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
@@ -342,6 +398,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
           if (line_eq(ex_frame->line, "quit") || line_eq(ex_frame->line, "q")) {
             return 1;
+          } else if (line_eq(ex_frame->line, "load")) {
+            load_file(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           frame_remove_char(ex_frame);
@@ -420,11 +478,13 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           }
         }
         break;
-      case AppMode_ex:
-        frame_insert_text(ex_frame, event.text.text);
-        break;
+      case AppMode_ex: {
+        uint32 text_size = strlen(event.text.text);
+        frame_insert_text(ex_frame, event.text.text, text_size);
+      } break;
       case AppMode_insert: {
-        frame_insert_text(main_frame, event.text.text);
+        uint32 text_size = strlen(event.text.text);
+        frame_insert_text(main_frame, event.text.text, text_size);
       } break;
       default:
         assert(false);
@@ -437,31 +497,16 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // -------- rendering
+  int main_frame_start_y = buffer->height * 0.01;
+  int ex_frame_start_y = buffer->height - state->font_h - 0.01 * buffer->height;
   // render main buffer
   frame_render(state, buffer->renderer, main_frame, buffer->width * 0.01,
-               buffer->height * 0.01, state->mode != AppMode_ex);
+               main_frame_start_y, ex_frame_start_y - main_frame_start_y,
+               state->mode != AppMode_ex);
 
   // render mode name
   {
-    const char *modeName = NULL;
-    switch (state->mode) {
-    case AppMode_normal: {
-      modeName = normalModeName;
-      break;
-    }
-    case AppMode_ex: {
-      modeName = exModeName;
-      break;
-    }
-    case AppMode_insert: {
-      modeName = insertModeName;
-      break;
-    }
-    default:
-      assert(false);
-      break;
-    }
-
+    const char *modeName = state_get_mode_name(state);
     SDL_Surface *text_surface =
         TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
 
@@ -475,18 +520,17 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     assert(ex_frame->line->next == NULL);
 
     int x = 0.01 * buffer->width;
-    int y = buffer->height - state->font_h - 0.01 * buffer->height;
 
     // first render ':'
     SDL_Color sdlFontColor = {UNHEX(fontColor)};
     SDL_Surface *surface =
         TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', sdlFontColor));
     SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-    SR_render_fullsize_and_destroy(&sr, x, y);
+    SR_render_fullsize_and_destroy(&sr, x, ex_frame_start_y);
     x += sr.surface->w;
 
-    frame_render(state, buffer->renderer, ex_frame, x, y,
-                 state->mode == AppMode_ex);
+    frame_render(state, buffer->renderer, ex_frame, x, ex_frame_start_y,
+                 buffer->height - ex_frame_start_y, state->mode == AppMode_ex);
   }
 
 #if DEBUG_WINDOW

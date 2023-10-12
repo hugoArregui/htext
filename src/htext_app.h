@@ -123,6 +123,7 @@ typedef struct {
   Line* deleted_line;
   Line* cursor_line;
   uint32 cursor_pos;
+  uint32 line_count;
 } Frame;
 
 typedef struct {
