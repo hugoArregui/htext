@@ -17,7 +17,6 @@
 
 // TODO load and write file
 // TODO better debug logging
-// TODO playback
 // TODO editorbuffer -> frame?
 
 const char *normalModeName = "NORMAL";
