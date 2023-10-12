@@ -202,7 +202,7 @@ void eb_new_line(MemoryArena *arena, EditorBuffer *buffer) {
 
   if (buffer->cursor_pos < buffer->cursor_line->size) {
     new_line->size = buffer->cursor_line->size - buffer->cursor_pos;
-    memcpy(new_line->text, buffer->line->text + buffer->cursor_pos,
+    memcpy(new_line->text, buffer->cursor_line->text + buffer->cursor_pos,
            new_line->size);
     buffer->cursor_line->size = buffer->cursor_pos;
   } else {
