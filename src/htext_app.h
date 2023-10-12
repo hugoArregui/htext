@@ -123,7 +123,7 @@ typedef struct {
   Line* deleted_line;
   Line* cursor_line;
   uint32 cursor_pos;
-} EditorBuffer;
+} Frame;
 
 typedef struct {
   int isInitialized;
@@ -131,8 +131,8 @@ typedef struct {
 
   MemoryArena arena;
 
-  EditorBuffer mainBuffer;
-  EditorBuffer exBuffer;
+  Frame main_frame;
+  Frame ex_frame;
 
   TTF_Font *font;
   int32 font_h;

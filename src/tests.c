@@ -16,103 +16,103 @@ int main(void) {
 
   initializeArena(&arena, totalSize, gameMemoryBlock);
 
-  EditorBuffer buffer = eb_create(&arena);
+  Frame frame = frame_create(&arena);
 
-  eb_insert_text(&buffer, "hello world");
-  assert(buffer.line == buffer.cursor_line);
-  assert(buffer.line->prev == NULL);
-  assert(buffer.line->size == 11);
-  assert(buffer.cursor_pos == 11);
-
-  //----
-  buffer.cursor_pos = 5;
-  eb_insert_text(&buffer, ",");
-  assert(buffer.line->size == 12);
-  assert(buffer.line->prev == NULL);
-  assert(line_eq(buffer.line, "hello, world"));
-  assert(buffer.cursor_pos == 6);
+  frame_insert_text(&frame, "hello world");
+  assert(frame.line == frame.cursor_line);
+  assert(frame.line->prev == NULL);
+  assert(frame.line->size == 11);
+  assert(frame.cursor_pos == 11);
 
   //----
-  buffer.cursor_pos = 5;
-  eb_remove_char(&buffer);
-  assert(line_eq(buffer.line, "hello world"));
-  assert(buffer.cursor_pos == 4);
-  assert(buffer.line->prev == NULL);
+  frame.cursor_pos = 5;
+  frame_insert_text(&frame, ",");
+  assert(frame.line->size == 12);
+  assert(frame.line->prev == NULL);
+  assert(line_eq(frame.line, "hello, world"));
+  assert(frame.cursor_pos == 6);
 
   //----
-  buffer.cursor_pos = 6;
-  eb_new_line(&arena, &buffer);
+  frame.cursor_pos = 5;
+  frame_remove_char(&frame);
+  assert(line_eq(frame.line, "hello world"));
+  assert(frame.cursor_pos == 4);
+  assert(frame.line->prev == NULL);
+
+  //----
+  frame.cursor_pos = 6;
+  frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     "world" cursor_pos = 0
   */
-  assert(buffer.line->size == 6);
-  assert(buffer.line->prev == NULL);
-  assert(buffer.line->next == buffer.cursor_line);
-  assert(buffer.line->next->prev == buffer.line);
-  assert(buffer.cursor_line == buffer.line->next);
-  assert(buffer.cursor_line->size == 5);
-  assert(line_eq(buffer.line, "hello "));
-  assert(line_eq(buffer.cursor_line, "world"));
-  assert(buffer.cursor_pos == 0);
-  assert(buffer.deleted_line == NULL);
+  assert(frame.line->size == 6);
+  assert(frame.line->prev == NULL);
+  assert(frame.line->next == frame.cursor_line);
+  assert(frame.line->next->prev == frame.line);
+  assert(frame.cursor_line == frame.line->next);
+  assert(frame.cursor_line->size == 5);
+  assert(line_eq(frame.line, "hello "));
+  assert(line_eq(frame.cursor_line, "world"));
+  assert(frame.cursor_pos == 0);
+  assert(frame.deleted_line == NULL);
 
   //----
-  eb_new_line(&arena, &buffer);
+  frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     ""
     "world" cursor_pos = 0
   */
-  assert(buffer.line->size == 6);
-  assert(buffer.line->next->size == 0);
-  assert(buffer.line->next->next->size == 5);
-  assert(buffer.cursor_pos == 0);
-  assert(buffer.deleted_line == NULL);
+  assert(frame.line->size == 6);
+  assert(frame.line->next->size == 0);
+  assert(frame.line->next->next->size == 5);
+  assert(frame.cursor_pos == 0);
+  assert(frame.deleted_line == NULL);
 
-  assert(buffer.line->prev == NULL);
-  assert(buffer.line->next->prev == buffer.line);
-  assert(buffer.line->next->next == buffer.cursor_line);
-  assert(buffer.line->next->next->prev == buffer.line->next);
+  assert(frame.line->prev == NULL);
+  assert(frame.line->next->prev == frame.line);
+  assert(frame.line->next->next == frame.cursor_line);
+  assert(frame.line->next->next->prev == frame.line->next);
 
   //----
-  eb_remove_char(&buffer);
+  frame_remove_char(&frame);
   /*
     "hello "
     "world" cursor_pos = 0
   */
-  assert(buffer.line->size == 6);
-  assert(buffer.line->next->size == 5);
-  assert(buffer.cursor_line == buffer.line->next);
-  assert(buffer.cursor_pos == 0);
-  assert(buffer.deleted_line != NULL);
+  assert(frame.line->size == 6);
+  assert(frame.line->next->size == 5);
+  assert(frame.cursor_line == frame.line->next);
+  assert(frame.cursor_pos == 0);
+  assert(frame.deleted_line != NULL);
 
-  assert(buffer.line->prev == NULL);
-  assert(buffer.line->next->prev == buffer.line);
-  assert(buffer.line->next->next == NULL);
-  assert(buffer.line->next == buffer.cursor_line);
+  assert(frame.line->prev == NULL);
+  assert(frame.line->next->prev == frame.line);
+  assert(frame.line->next->next == NULL);
+  assert(frame.line->next == frame.cursor_line);
 
-  Line* deleted_line = buffer.deleted_line;
+  Line* deleted_line = frame.deleted_line;
 
   //----
-  buffer.cursor_pos = 5;
-  eb_new_line(&arena, &buffer);
+  frame.cursor_pos = 5;
+  frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     "world"
     "" cursor_pos = 0
   */
-  assert(buffer.line->size == 6);
-  assert(buffer.line->next->size == 5);
-  assert(buffer.line->next->next->size == 0);
-  assert(deleted_line == buffer.cursor_line); // reusing deleted line
-  assert(buffer.cursor_pos == 0);
-  assert(buffer.deleted_line == NULL);
+  assert(frame.line->size == 6);
+  assert(frame.line->next->size == 5);
+  assert(frame.line->next->next->size == 0);
+  assert(deleted_line == frame.cursor_line); // reusing deleted line
+  assert(frame.cursor_pos == 0);
+  assert(frame.deleted_line == NULL);
 
-  assert(buffer.line->prev == NULL);
-  assert(buffer.line->next->prev == buffer.line);
-  assert(buffer.line->next->next->prev == buffer.line->next);
-  assert(buffer.line->next->next == buffer.cursor_line);
+  assert(frame.line->prev == NULL);
+  assert(frame.line->next->prev == frame.line);
+  assert(frame.line->next->next->prev == frame.line->next);
+  assert(frame.line->next->next == frame.cursor_line);
 
 
 
