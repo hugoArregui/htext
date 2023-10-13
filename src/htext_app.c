@@ -387,7 +387,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     state->mode = AppMode_normal;
 
     // NOTE: this is executed once
-    // TODO: this should be cleared at exit
+    // TODO: this should be cleared at exit, but do we care?
     state->font = TTF_cpointer(
         TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
 
