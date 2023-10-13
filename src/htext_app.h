@@ -4,6 +4,8 @@
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 
+#define INDEX_SIZE 5000
+
 typedef struct {
   memory_index size;
   uint8 *base;
@@ -118,13 +120,26 @@ typedef struct Line {
 
 typedef struct {
   Line* line;
+  uint32 line_num;
+  uint32 column;
+} Cursor;
+
+typedef struct {
+  Line* line;
+  uint32 line_count;
+  // NOTE: currently I use this only to optimize the rendering window, so it could be much smaller, some cursor_line +/- amount_of_lines_to_render
+  Line* index[INDEX_SIZE];
+
+  Cursor cursor;
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line* deleted_line;
-  Line* cursor_line;
-  uint32 cursor_pos;
-  uint32 line_count;
-} Frame;
+} MainFrame;
+
+typedef struct {
+  Line* line;
+  Cursor cursor;
+} ExFrame;
 
 typedef struct {
   int isInitialized;
@@ -132,8 +147,8 @@ typedef struct {
 
   MemoryArena arena;
 
-  Frame main_frame;
-  Frame ex_frame;
+  MainFrame main_frame;
+  ExFrame ex_frame;
 
   TTF_Font *font;
   int32 font_h;

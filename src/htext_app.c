@@ -42,10 +42,12 @@ const uint32 cursorColor = fontColor | 0x9F;
 #define assert_line_integrity(state)                                           \
   _assert_line_integrity(state, __FILE__, __LINE__)
 
-void assert_main_frame_integrity(Frame *main_frame, char *file, int linenum) {
+void assert_main_frame_integrity(MainFrame *main_frame, char *file,
+                                 int linenum) {
   Line *prev_line = NULL;
 
   uint32 total_lines = 0;
+  // TODO check cursor line_num integrity
   for (Line *line = main_frame->line; line != NULL; line = line->next) {
     total_lines++;
     if (line->prev == line) {
@@ -86,8 +88,6 @@ void assert_main_frame_integrity(Frame *main_frame, char *file, int linenum) {
 
 void _assert_line_integrity(State *state, char *file, int linenum) {
   assert(state->ex_frame.line->next == NULL);
-  assert(state->ex_frame.deleted_line == NULL);
-
   assert_main_frame_integrity(&state->main_frame, file, linenum);
 }
 #else
@@ -136,61 +136,33 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
-                  int x_start, int y_start, int h, bool32 is_cursor_active) {
+void render_lines(SDL_Renderer *renderer, TTF_Font *font, Line *start_line,
+                  Line *end_line, Cursor cursor, int x_start, int y_start,
+                  bool32 is_cursor_active) {
   int x = x_start;
   int y = y_start;
 
-  const int cursor_w = state->font_h / 2;
+  int font_h = TTF_FontHeight(font);
+  const int cursor_w = font_h / 2;
   bool32 cursor_rendered = false;
 
   SDL_Color sdlFontColor = {UNHEX(fontColor)};
 
-  uint32 lines_to_render = h / state->font_h;
-  Line *start_line = frame->line;
-  Line *end_line = NULL;
-
-  if (lines_to_render < frame->line_count) {
-    uint32 cursor_line_num = 0;
-    for (Line *line = frame->line; line != frame->cursor_line;
-         line = line->next) {
-      cursor_line_num++;
-    }
-
-    int64 start_line_num = cursor_line_num - (lines_to_render / 2);
-    if (start_line_num < 0) {
-      start_line_num = 0;
-    }
-    int64 end_line_num = start_line_num + lines_to_render;
-
-    int64 i = 0;
-    for (Line *line = frame->line; line != frame->cursor_line;
-         line = line->next) {
-      if (i == start_line_num) {
-        start_line = line;
-      } else if (i == end_line_num) {
-        end_line = line;
-        break;
-      }
-      ++i;
-    }
-  }
-
   for (Line *line = start_line; line != end_line; line = line->next) {
     for (uint64 i = 0; i < line->size; ++i) {
       uint32 ch = line->text[i];
-      if (line == frame->cursor_line && i == frame->cursor_pos) {
+      if (line == cursor.line && i == cursor.column) {
         SDL_Rect dest;
         dest.x = x;
         dest.y = y;
         dest.w = cursor_w;
-        dest.h = state->font_h;
+        dest.h = font_h;
         render_cursor(renderer, dest, is_cursor_active);
         cursor_rendered = true;
       }
 
       SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, sdlFontColor));
+          TTF_cpointer(TTF_RenderGlyph_Solid(font, ch, sdlFontColor));
 
       SurfaceRenderer sr = SR_create(renderer, surface);
       int w = sr.surface->w;
@@ -198,44 +170,95 @@ void frame_render(State *state, SDL_Renderer *renderer, Frame *frame,
       x += w;
     }
 
-    if (!cursor_rendered && line == frame->cursor_line) {
+    if (!cursor_rendered && line == cursor.line) {
       SDL_Rect dest;
       dest.x = x;
       dest.y = y;
       dest.w = cursor_w;
-      dest.h = state->font_h;
+      dest.h = font_h;
 
       render_cursor(renderer, dest, is_cursor_active);
     }
 
-    y += state->font_h;
+    y += font_h;
     x = x_start;
   }
 }
 
-Frame frame_create(MemoryArena *arena) {
+Line *line_create(MemoryArena *arena) {
   Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
   line->max_size = 200;
   line->size = 0;
   line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
   line->prev = NULL;
   line->next = NULL;
-  return (Frame){
-      .line = line, .cursor_line = line, .cursor_pos = 0, .line_count = 1};
+  return line;
 }
 
-void frame_insert_text(Frame *frame, char *text, uint32 text_size) {
-  Line *line = frame->cursor_line;
+void frame_insert_text(Cursor *cursor, char *text, uint32 text_size) {
+  Line *line = cursor->line;
 
   assert(line->max_size >= (line->size + text_size));
-  memcpy(line->text + frame->cursor_pos + text_size,
-         line->text + frame->cursor_pos, line->size - frame->cursor_pos);
-  memcpy(line->text + frame->cursor_pos, text, text_size);
+  memcpy(line->text + cursor->column + text_size, line->text + cursor->column,
+         line->size - cursor->column);
+  memcpy(line->text + cursor->column, text, text_size);
   line->size += text_size;
-  frame->cursor_pos += text_size;
+  cursor->column += text_size;
 }
 
-void frame_insert_new_line(MemoryArena *arena, Frame *frame) {
+// TODO: reindex using the previous index
+void main_frame_reindex(MainFrame *frame) {
+  uint32 i = 0;
+  for (Line *line = frame->line; line != NULL; line = line->next) {
+    frame->index[i] = line;
+    ++i;
+    assert(i < INDEX_SIZE);
+  }
+  assert(i == frame->line_count);
+}
+
+void main_frame_remove_char(MainFrame *frame) {
+  if (frame->cursor.column == 0) {
+    if (frame->cursor.line->prev != NULL) {
+      Line *line_to_remove = frame->cursor.line;
+
+      // we remove line_to_remove
+      frame->cursor.line = line_to_remove->prev;
+      frame->cursor.line->next = line_to_remove->next;
+      if (frame->cursor.line->next != NULL) {
+        frame->cursor.line->next->prev = frame->cursor.line;
+      }
+      frame->line_count--;
+
+      frame->cursor.column = frame->cursor.line->size;
+      if (line_to_remove->size > 0) {
+        // we need to join line_to_remove with prev cursor line
+        assert(frame->cursor.line->max_size >=
+               (frame->cursor.line->size + line_to_remove->size));
+        memcpy(frame->cursor.line->text + frame->cursor.line->size,
+               line_to_remove->text, line_to_remove->size);
+        frame->cursor.line->size += line_to_remove->size;
+      }
+
+      if (frame->deleted_line != NULL) {
+        line_to_remove->next = NULL;
+        line_to_remove->prev = NULL;
+        line_insert_next(line_to_remove, frame->deleted_line);
+      }
+      frame->deleted_line = line_to_remove;
+      main_frame_reindex(frame);
+    }
+  } else {
+    assert(frame->cursor.column <= frame->cursor.line->size);
+    memcpy(frame->cursor.line->text + frame->cursor.column,
+           frame->cursor.line->text + frame->cursor.column + 1,
+           frame->cursor.line->size - frame->cursor.column);
+    frame->cursor.line->size--;
+    frame->cursor.column--;
+  }
+}
+
+void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
@@ -247,59 +270,30 @@ void frame_insert_new_line(MemoryArena *arena, Frame *frame) {
         (char *)pushSize(arena, new_line->max_size, DEFAULT_ALIGMENT);
   }
 
-  if (frame->cursor_pos < frame->cursor_line->size) {
-    new_line->size = frame->cursor_line->size - frame->cursor_pos;
-    memcpy(new_line->text, frame->cursor_line->text + frame->cursor_pos,
+  if (frame->cursor.column < frame->cursor.line->size) {
+    new_line->size = frame->cursor.line->size - frame->cursor.column;
+    memcpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
            new_line->size);
-    frame->cursor_line->size = frame->cursor_pos;
+    frame->cursor.line->size = frame->cursor.column;
   } else {
     new_line->size = 0;
   }
 
-  line_insert_next(frame->cursor_line, new_line);
-  frame->cursor_line = new_line;
-  frame->cursor_pos = 0;
+  line_insert_next(frame->cursor.line, new_line);
+  frame->cursor.line = new_line;
+  frame->cursor.line_num++;
+  frame->cursor.column = 0;
   frame->line_count++;
+  main_frame_reindex(frame);
 }
 
-void frame_remove_char(Frame *frame) {
-  if (frame->cursor_pos == 0) {
-    if (frame->cursor_line->prev != NULL) {
-      Line *line_to_remove = frame->cursor_line;
-
-      // we remove line_to_remove
-      frame->cursor_line = line_to_remove->prev;
-      frame->cursor_line->next = line_to_remove->next;
-      if (frame->cursor_line->next != NULL) {
-        frame->cursor_line->next->prev = frame->cursor_line;
-      }
-      frame->line_count--;
-
-      frame->cursor_pos = frame->cursor_line->size;
-      if (line_to_remove->size > 0) {
-        // we need to join line_to_remove with prev cursor line
-        assert(frame->cursor_line->max_size >=
-               (frame->cursor_line->size + line_to_remove->size));
-        memcpy(frame->cursor_line->text + frame->cursor_line->size,
-               line_to_remove->text, line_to_remove->size);
-        frame->cursor_line->size += line_to_remove->size;
-      }
-
-      if (frame->deleted_line != NULL) {
-        line_to_remove->next = NULL;
-        line_to_remove->prev = NULL;
-        line_insert_next(line_to_remove, frame->deleted_line);
-      }
-      frame->deleted_line = line_to_remove;
-    }
-  } else {
-    assert(frame->cursor_pos <= frame->cursor_line->size);
-    memcpy(frame->cursor_line->text + frame->cursor_pos,
-           frame->cursor_line->text + frame->cursor_pos + 1,
-           frame->cursor_line->size - frame->cursor_pos);
-    frame->cursor_line->size--;
-    frame->cursor_pos--;
-  }
+void ex_frame_remove_char(ExFrame *frame) {
+  assert(frame->cursor.column <= frame->cursor.line->size);
+  memcpy(frame->cursor.line->text + frame->cursor.column,
+         frame->cursor.line->text + frame->cursor.column + 1,
+         frame->cursor.line->size - frame->cursor.column);
+  frame->cursor.line->size--;
+  frame->cursor.column--;
 }
 
 #if DEBUG_PLAYBACK == PLAYBACK_RECORDING
@@ -339,15 +333,17 @@ int load_file(State *state) {
   int read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      frame_insert_new_line(&state->arena, &state->main_frame);
+      main_frame_insert_new_line(&state->arena, &state->main_frame);
     } else {
-      frame_insert_text(&state->main_frame, &c, 1);
+      frame_insert_text(&state->main_frame.cursor, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
 
-  state->main_frame.cursor_line = state->main_frame.line;
-  state->main_frame.cursor_pos = 0;
+  state->main_frame.cursor.line = state->main_frame.line;
+  state->main_frame.cursor.line_num = 0;
+  state->main_frame.cursor.column = 0;
+  main_frame_reindex(&state->main_frame);
   return 0;
 }
 
@@ -372,6 +368,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     state->mode = AppMode_normal;
 
     // NOTE: this is executed once
+    // TODO: this should be cleared at exit
     state->font = TTF_cpointer(
         TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
 
@@ -380,8 +377,20 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
-    state->main_frame = frame_create(&state->arena);
-    state->ex_frame = frame_create(&state->arena);
+    {
+      Line *line = line_create(&state->arena);
+      state->main_frame =
+          (MainFrame){.line = line,
+                      .cursor = (Cursor){.line = line, .column = 0},
+                      .line_count = 1};
+    }
+    {
+      Line *line = line_create(&state->arena);
+      state->ex_frame = (ExFrame){
+          .line = line,
+          .cursor = (Cursor){.line = line, .column = 0},
+      };
+    }
 
     state->isInitialized = true;
   }
@@ -401,8 +410,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     printf("RELOAD\n");
   }
 
-  Frame *main_frame = &state->main_frame;
-  Frame *ex_frame = &state->ex_frame;
+  MainFrame *main_frame = &state->main_frame;
+  ExFrame *ex_frame = &state->ex_frame;
 
   SDL_Event event;
   while (poll_event(input, &event)) {
@@ -421,20 +430,20 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             load_file(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          frame_remove_char(ex_frame);
+          ex_frame_remove_char(ex_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
           ex_frame->line->size = 0;
-          ex_frame->cursor_pos = 0;
+          ex_frame->cursor.column = 0;
         }
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          frame_insert_new_line(&state->arena, main_frame);
+          main_frame_insert_new_line(&state->arena, main_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          frame_remove_char(main_frame);
+          main_frame_remove_char(main_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
@@ -453,45 +462,47 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           case ':': {
             state->mode = AppMode_ex;
             ex_frame->line->size = 0;
-            ex_frame->cursor_pos = 0;
+            ex_frame->cursor.column = 0;
           } break;
           case 'i': {
             state->mode = AppMode_insert;
           } break;
           case 'h': {
-            if (main_frame->cursor_pos > 0) {
-              main_frame->cursor_pos--;
+            if (main_frame->cursor.column > 0) {
+              main_frame->cursor.column--;
             }
           } break;
           case 'l': {
-            if (main_frame->cursor_pos < main_frame->cursor_line->size) {
-              main_frame->cursor_pos++;
+            if (main_frame->cursor.column < main_frame->cursor.line->size) {
+              main_frame->cursor.column++;
             }
           } break;
           case 'k': {
-            if (main_frame->cursor_line->prev != NULL) {
-              main_frame->cursor_line = main_frame->cursor_line->prev;
-              if (main_frame->cursor_pos > main_frame->cursor_line->size) {
-                main_frame->cursor_pos = main_frame->cursor_line->size;
+            if (main_frame->cursor.line->prev != NULL) {
+              main_frame->cursor.line = main_frame->cursor.line->prev;
+              main_frame->cursor.line_num--;
+              if (main_frame->cursor.column > main_frame->cursor.line->size) {
+                main_frame->cursor.column = main_frame->cursor.line->size;
               }
             }
           } break;
           case 'j': {
-            if (main_frame->cursor_line->next != NULL) {
-              main_frame->cursor_line = main_frame->cursor_line->next;
-              if (main_frame->cursor_pos > main_frame->cursor_line->size) {
-                main_frame->cursor_pos = main_frame->cursor_line->size;
+            if (main_frame->cursor.line->next != NULL) {
+              main_frame->cursor.line = main_frame->cursor.line->next;
+              main_frame->cursor.line_num++;
+              if (main_frame->cursor.column > main_frame->cursor.line->size) {
+                main_frame->cursor.column = main_frame->cursor.line->size;
               }
             }
           } break;
           case 'H': {
-            main_frame->cursor_pos = 0;
+            main_frame->cursor.column = 0;
           } break;
           case 'L': {
-            main_frame->cursor_pos = main_frame->cursor_line->size;
+            main_frame->cursor.column = main_frame->cursor.line->size;
           } break;
           case 'A': {
-            main_frame->cursor_pos = main_frame->cursor_line->size;
+            main_frame->cursor.column = main_frame->cursor.line->size;
             state->mode = AppMode_insert;
           } break;
           }
@@ -499,11 +510,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_ex: {
         uint32 text_size = strlen(event.text.text);
-        frame_insert_text(ex_frame, event.text.text, text_size);
+        frame_insert_text(&ex_frame->cursor, event.text.text, text_size);
       } break;
       case AppMode_insert: {
         uint32 text_size = strlen(event.text.text);
-        frame_insert_text(main_frame, event.text.text, text_size);
+        frame_insert_text(&main_frame->cursor, event.text.text, text_size);
       } break;
       default:
         assert(false);
@@ -518,10 +529,33 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   // -------- rendering
   int main_frame_start_y = buffer->height * 0.01;
   int ex_frame_start_y = buffer->height - state->font_h - 0.01 * buffer->height;
+
   // render main buffer
-  frame_render(state, buffer->renderer, main_frame, buffer->width * 0.01,
-               main_frame_start_y, ex_frame_start_y - main_frame_start_y,
-               state->mode != AppMode_ex);
+
+  {
+    int h = ex_frame_start_y - main_frame_start_y;
+    uint32 lines_to_render = h / state->font_h;
+    Line *start_line = main_frame->line;
+    Line *end_line = NULL;
+
+    if (lines_to_render < main_frame->line_count) {
+      int start_line_num = main_frame->cursor.line_num - (lines_to_render / 2);
+      if (start_line_num < 0) {
+        start_line_num = 0;
+      }
+      uint32 end_line_num = start_line_num + lines_to_render;
+      if (end_line_num > main_frame->line_count) {
+        end_line_num = main_frame->line_count;
+      }
+      start_line = main_frame->index[start_line_num];
+      end_line = main_frame->index[end_line_num];
+      assert(start_line != NULL);
+    }
+
+    render_lines(buffer->renderer, state->font, start_line, end_line,
+                 main_frame->cursor, buffer->width * 0.01, main_frame_start_y,
+                 state->mode != AppMode_ex);
+  }
 
   // render mode name
   {
@@ -548,8 +582,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     SR_render_fullsize_and_destroy(&sr, x, ex_frame_start_y);
     x += sr.surface->w;
 
-    frame_render(state, buffer->renderer, ex_frame, x, ex_frame_start_y,
-                 buffer->height - ex_frame_start_y, state->mode == AppMode_ex);
+    render_lines(buffer->renderer, state->font, ex_frame->line, NULL,
+                 ex_frame->cursor, x, ex_frame_start_y,
+                 state->mode == AppMode_ex);
   }
 
 #if DEBUG_WINDOW
@@ -557,7 +592,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     char *text =
         (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
     SDL_Color color = {UNHEX(debugFontColor)};
-    sprintf(text, "Cursor position: %d\n", main_frame->cursor_pos);
+    sprintf(text, "Cursor position: %d\n", main_frame->cursor.column);
 
     const int margin_x = buffer->width * 0.01;
     const int margin_y = buffer->height * 0.01;
