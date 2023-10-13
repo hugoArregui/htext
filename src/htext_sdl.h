@@ -17,15 +17,4 @@ void *_TTF_cpointer(void *p, char*file, int linenum);
 void _SDL_ccode(int code, char*file, int linenum);
 void *_SDL_cpointer(void *p, char*file, int linenum);
 
-// surface renderer
-typedef struct SurfaceRenderer {
-  SDL_Renderer *renderer;
-  SDL_Surface *surface;
-  SDL_Texture *texture;
-} SurfaceRenderer;
-
-SurfaceRenderer SR_create(SDL_Renderer *renderer, SDL_Surface *surface);
-void SR_render_and_destroy(SurfaceRenderer *surfaceRenderer, SDL_Rect *dest);
-void SR_render_fullsize_and_destroy(SurfaceRenderer *sr, int x, int y);
-
 #endif

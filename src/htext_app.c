@@ -136,6 +136,36 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
+Glyph *render_char(State *state, SDL_Renderer *renderer, int ch, int x, int y) {
+  Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
+  assert(glyph != NULL);
+
+  SDL_Rect dest;
+  dest.x = x;
+  dest.y = y;
+  dest.w = glyph->w;
+  dest.h = glyph->h;
+  SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
+  return glyph;
+}
+
+void render_text(State *state, SDL_Renderer *renderer, const char *text,
+                 int len, int x, int y) {
+  for (int i = 0; i < len; ++i) {
+    char ch = text[i];
+    Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
+    assert(glyph != NULL);
+
+    SDL_Rect dest;
+    dest.x = x;
+    dest.y = y;
+    dest.w = glyph->w;
+    dest.h = glyph->h;
+    SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
+    x += glyph->w;
+  }
+}
+
 void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
                   bool32 is_cursor_active) {
@@ -158,18 +188,7 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
         cursor_rendered = true;
       }
 
-      assert((ch - ASCII_LOW) < ASCII_HIGH);
-      Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
-      assert(glyph != NULL);
-
-      SDL_Rect dest;
-      dest.x = x;
-      dest.y = y;
-      dest.w = glyph->w;
-      dest.h = glyph->h;
-      SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
-
-      x += glyph->w;
+      x += render_char(state, renderer, ch, x, y)->w;
     }
 
     if (!cursor_rendered && line == cursor.line) {
@@ -351,8 +370,6 @@ int load_file(State *state) {
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
-
-  SDL_Color sdlModeColor = {UNHEX(0xFF000000)};
 
 #if DEBUG_WINDOW
   uint32 debugBackgroundColor = 0xFFFFFFFF;
@@ -574,13 +591,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   // render mode name
   {
     const char *modeName = state_get_mode_name(state);
-    SDL_Surface *text_surface =
-        TTF_cpointer(TTF_RenderText_Solid(state->font, modeName, sdlModeColor));
-
-    SurfaceRenderer sr = SR_create(buffer->renderer, text_surface);
-    SR_render_fullsize_and_destroy(
-        &sr, buffer->width - text_surface->w - buffer->width * 0.01,
-        buffer->height - text_surface->h - 0.03 * buffer->height);
+    render_text(state, buffer->renderer, modeName, strlen(modeName),
+                buffer->width - buffer->width * 0.05,
+                buffer->height - state->font_h - 0.03 * buffer->height);
   }
 
   if (state->mode == AppMode_ex) {
@@ -589,12 +602,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int x = 0.01 * buffer->width;
 
     // first render ':'
-    SDL_Color sdlFontColor = {UNHEX(fontColor)};
-    SDL_Surface *surface =
-        TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', sdlFontColor));
-    SurfaceRenderer sr = SR_create(buffer->renderer, surface);
-    SR_render_fullsize_and_destroy(&sr, x, ex_frame_start_y);
-    x += sr.surface->w;
+    x += render_char(state, buffer->renderer, ':', x, ex_frame_start_y)->w;
 
     render_lines(state, buffer->renderer, ex_frame->line, NULL,
                  ex_frame->cursor, x, ex_frame_start_y,
@@ -623,12 +631,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         continue;
       }
 
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ch, color));
-      SurfaceRenderer sr = SR_create(buffer->debugRenderer, surface);
-      int w = sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-      x += w;
+      x += render_char(state, renderer, ch, x, y)->w;
     }
   }
 #endif
