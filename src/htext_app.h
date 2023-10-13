@@ -1,5 +1,6 @@
 #ifndef __H_TEXT_H_TEXT
 
+#include <SDL2/SDL_render.h>
 #include "htext_platform.h"
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
@@ -141,6 +142,15 @@ typedef struct {
   Cursor cursor;
 } ExFrame;
 
+#define ASCII_LOW 32
+#define ASCII_HIGH 126
+
+typedef struct {
+  SDL_Texture* texture;
+  int w;
+  int h;
+} Glyph;
+
 typedef struct {
   int isInitialized;
   enum AppMode mode;
@@ -151,6 +161,7 @@ typedef struct {
   ExFrame ex_frame;
 
   TTF_Font *font;
+  Glyph glyph_cache[ASCII_HIGH-ASCII_LOW];
   int32 font_h;
 } State;
 

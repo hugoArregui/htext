@@ -136,17 +136,14 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-void render_lines(SDL_Renderer *renderer, TTF_Font *font, Line *start_line,
+void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
                   bool32 is_cursor_active) {
   int x = x_start;
   int y = y_start;
 
-  int font_h = TTF_FontHeight(font);
-  const int cursor_w = font_h / 2;
+  const int cursor_w = state->font_h / 2;
   bool32 cursor_rendered = false;
-
-  SDL_Color sdlFontColor = {UNHEX(fontColor)};
 
   for (Line *line = start_line; line != end_line; line = line->next) {
     for (uint64 i = 0; i < line->size; ++i) {
@@ -156,18 +153,23 @@ void render_lines(SDL_Renderer *renderer, TTF_Font *font, Line *start_line,
         dest.x = x;
         dest.y = y;
         dest.w = cursor_w;
-        dest.h = font_h;
+        dest.h = state->font_h;
         render_cursor(renderer, dest, is_cursor_active);
         cursor_rendered = true;
       }
 
-      SDL_Surface *surface =
-          TTF_cpointer(TTF_RenderGlyph_Solid(font, ch, sdlFontColor));
+      assert((ch - ASCII_LOW) < ASCII_HIGH);
+      Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
+      assert(glyph != NULL);
 
-      SurfaceRenderer sr = SR_create(renderer, surface);
-      int w = sr.surface->w;
-      SR_render_fullsize_and_destroy(&sr, x, y);
-      x += w;
+      SDL_Rect dest;
+      dest.x = x;
+      dest.y = y;
+      dest.w = glyph->w;
+      dest.h = glyph->h;
+      SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
+
+      x += glyph->w;
     }
 
     if (!cursor_rendered && line == cursor.line) {
@@ -175,12 +177,12 @@ void render_lines(SDL_Renderer *renderer, TTF_Font *font, Line *start_line,
       dest.x = x;
       dest.y = y;
       dest.w = cursor_w;
-      dest.h = font_h;
+      dest.h = state->font_h;
 
       render_cursor(renderer, dest, is_cursor_active);
     }
 
-    y += font_h;
+    y += state->font_h;
     x = x_start;
   }
 }
@@ -374,6 +376,17 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     state->font_h = TTF_FontHeight(state->font);
 
+    SDL_Color sdlFontColor = {UNHEX(fontColor)};
+    for (int i = ASCII_LOW; i < ASCII_HIGH; ++i) {
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, i, sdlFontColor));
+      SDL_Texture *texture =
+          SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, surface));
+      state->glyph_cache[i - ASCII_LOW] =
+          (Glyph){.texture = texture, .w = surface->w, .h = surface->h};
+      SDL_FreeSurface(surface);
+    }
+
     initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                     (uint8 *)memory->permanentStorage + sizeof(State));
 
@@ -536,9 +549,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int h = ex_frame_start_y - main_frame_start_y;
     uint32 lines_to_render = h / state->font_h;
     Line *start_line = main_frame->line;
+    assert(start_line != NULL);
     Line *end_line = NULL;
 
-    if (lines_to_render < main_frame->line_count) {
+    if (main_frame->line_count > lines_to_render) {
       int start_line_num = main_frame->cursor.line_num - (lines_to_render / 2);
       if (start_line_num < 0) {
         start_line_num = 0;
@@ -552,7 +566,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       assert(start_line != NULL);
     }
 
-    render_lines(buffer->renderer, state->font, start_line, end_line,
+    render_lines(state, buffer->renderer, start_line, end_line,
                  main_frame->cursor, buffer->width * 0.01, main_frame_start_y,
                  state->mode != AppMode_ex);
   }
@@ -582,7 +596,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     SR_render_fullsize_and_destroy(&sr, x, ex_frame_start_y);
     x += sr.surface->w;
 
-    render_lines(buffer->renderer, state->font, ex_frame->line, NULL,
+    render_lines(state, buffer->renderer, ex_frame->line, NULL,
                  ex_frame->cursor, x, ex_frame_start_y,
                  state->mode == AppMode_ex);
   }
