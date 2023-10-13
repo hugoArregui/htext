@@ -169,40 +169,31 @@ void render_text(State *state, SDL_Renderer *renderer, const char *text,
 void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
                   bool32 is_cursor_active) {
-  int x = x_start;
-  int y = y_start;
-
   const int cursor_w = state->font_h / 2;
   bool32 cursor_rendered = false;
 
+  SDL_Rect dest;
+  dest.x = x_start;
+  dest.w = cursor_w;
+  dest.y = y_start;
+  dest.h = state->font_h;
   for (Line *line = start_line; line != end_line; line = line->next) {
     for (uint64 i = 0; i < line->size; ++i) {
       uint32 ch = line->text[i];
       if (line == cursor.line && i == cursor.column) {
-        SDL_Rect dest;
-        dest.x = x;
-        dest.y = y;
-        dest.w = cursor_w;
-        dest.h = state->font_h;
         render_cursor(renderer, dest, is_cursor_active);
         cursor_rendered = true;
       }
 
-      x += render_char(state, renderer, ch, x, y)->w;
+      dest.x += render_char(state, renderer, ch, dest.x, dest.y)->w;
     }
 
     if (!cursor_rendered && line == cursor.line) {
-      SDL_Rect dest;
-      dest.x = x;
-      dest.y = y;
-      dest.w = cursor_w;
-      dest.h = state->font_h;
-
       render_cursor(renderer, dest, is_cursor_active);
     }
 
-    y += state->font_h;
-    x = x_start;
+    dest.y += state->font_h;
+    dest.x = x_start;
   }
 }
 
