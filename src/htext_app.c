@@ -17,9 +17,6 @@
 #include <string.h>
 #include <sys/types.h>
 
-// TODO load and write file
-// TODO better debug logging
-
 const uint32 backgroundColor = 0x00000000;
 const uint32 fontColor = 0xFFFFFF00;
 const uint32 modeColor = 0xFF000000;
@@ -40,7 +37,7 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
                                  int linenum) {
   Line *prev_line = NULL;
 
-  uint32 total_lines = 0;
+  uint32 line_num = 0;
   for (Line *line = main_frame->line; line != NULL; line = line->next) {
     my_assert(line->prev != line, file, linenum);
     my_assert(line->next != line, file, linenum);
@@ -48,17 +45,17 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
     my_assert(line->max_size > 0, file, linenum);
 
     if (line == main_frame->cursor.line) {
-      my_assert(total_lines == main_frame->cursor.line_num, file, linenum)
+      my_assert(line_num == main_frame->cursor.line_num, file, linenum)
     }
 
     for (uint32 i = 0; i < line->size; ++i) {
-      my_assert(line->text[i] > 32, file, linenum);
+      my_assert(line->text[i] >= 32, file, linenum);
     }
     prev_line = line;
-    total_lines++;
+    line_num++;
   }
 
-  assert(total_lines == main_frame->line_count);
+  assert(line_num == main_frame->line_count);
 
   for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
     my_assert(line->texture == NULL, file, linenum);
@@ -75,10 +72,12 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
 #endif
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
-                               char *text, SDL_Color color, uint16 *w) {
+                               char *text, SDL_Color color, int32 *w) {
 
   SDL_Surface *surface = TTF_cpointer(TTF_RenderText_Solid(font, text, color));
-  *w = surface->w;
+  if (w != NULL) {
+    *w = surface->w;
+  }
   SDL_Texture *texture =
       SDL_cpointer(SDL_CreateTextureFromSurface(renderer, surface));
   SDL_FreeSurface(surface);
@@ -234,6 +233,26 @@ void main_frame_reindex(MainFrame *frame) {
   assert(i == frame->line_count);
 }
 
+void main_frame_clear(MainFrame *frame) {
+  for (Line *line = frame->line->next; line != NULL;) {
+    line_invalidate_texture(line);
+    Line *next_line = line->next;
+    line->next = NULL;
+    if (frame->deleted_line == NULL) {
+      frame->deleted_line = line;
+    } else {
+      line_insert_next(frame->deleted_line, line);
+    }
+    line = next_line;
+  }
+  frame->cursor.line_num = 0;
+  frame->cursor.line = frame->line;
+  frame->cursor.line->next = NULL;
+  frame->cursor.column = 0;
+  frame->line->size = 0;
+  frame->line_count = 1;
+}
+
 void main_frame_remove_char(MainFrame *frame) {
   if (frame->cursor.column == 0) {
     if (frame->cursor.line->prev != NULL) {
@@ -243,6 +262,7 @@ void main_frame_remove_char(MainFrame *frame) {
       // we remove line_to_remove
       frame->cursor.line = line_to_remove->prev;
       frame->cursor.line->next = line_to_remove->next;
+      frame->cursor.line_num--;
       if (frame->cursor.line->next != NULL) {
         frame->cursor.line->next->prev = frame->cursor.line;
       }
@@ -268,8 +288,8 @@ void main_frame_remove_char(MainFrame *frame) {
     }
   } else {
     assert(frame->cursor.column <= frame->cursor.line->size);
-    memcpy(frame->cursor.line->text + frame->cursor.column,
-           frame->cursor.line->text + frame->cursor.column + 1,
+    memcpy(frame->cursor.line->text + frame->cursor.column - 1,
+           frame->cursor.line->text + frame->cursor.column,
            frame->cursor.line->size - frame->cursor.column);
     frame->cursor.line->size--;
     frame->cursor.column--;
@@ -294,6 +314,7 @@ void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
     new_line->size = frame->cursor.line->size - frame->cursor.column;
     memcpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
            new_line->size);
+    line_invalidate_texture(frame->cursor.line);
     frame->cursor.line->size = frame->cursor.column;
   } else {
     new_line->size = 0;
@@ -348,13 +369,17 @@ int load_file(State *state) {
     return -1;
   }
 
-  // TODO clear main_frame first
+  main_frame_clear(&state->main_frame);
+  assert_line_integrity(state);
+  assert(state->main_frame.line_count == 1);
+
   char c;
   int read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
       main_frame_insert_new_line(&state->arena, &state->main_frame);
     } else {
+      assert(c >= 32);
       cursor_insert_text(&state->main_frame.cursor, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
@@ -468,6 +493,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
             load_file(state);
+            assert_line_integrity(state);
+          } else if (line_eq(ex_frame->line, "clear")) {
+            main_frame_clear(main_frame);
+            assert_line_integrity(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           ex_frame_remove_char(ex_frame);
@@ -625,27 +654,46 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
 #if DEBUG_WINDOW
   {
-    char *text =
-        (char *)pushSize(&transientState->arena, 1000, DEFAULT_ALIGMENT);
     SDL_Color color = {UNHEX(debugFontColor)};
-    sprintf(text, "Cursor position: %d\n", main_frame->cursor.column);
-
     const int margin_x = buffer->width * 0.01;
     const int margin_y = buffer->height * 0.01;
 
-    int x = margin_x;
-    int y = margin_y;
+    char text[100];
 
-    for (uint17 i = 0; i < strlen(text); ++i) {
-      char ch = text[i];
+    SDL_Rect dest;
+    dest.x = margin_x;
+    dest.y = margin_y;
+    dest.h = state->font_h;
 
-      if (ch == '\n') {
-        y += state->font_h;
-        x = margin_x;
-        continue;
-      }
+    {
+      sprintf(text, "Cursor position: %d", main_frame->cursor.column);
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+    }
 
-      x += render_char(state, renderer, ch, x, y)->w;
+    dest.y += state->font_h;
+
+    if (main_frame->line->size > 0) {
+      memcpy(text, main_frame->line->text, main_frame->line->size);
+      text[main_frame->line->size] = '\0';
+
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
+    }
+
+    if (main_frame->line->size > 0) {
+      sprintf(text, "Line size: %d", main_frame->line->size);
+
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
     }
   }
 #endif

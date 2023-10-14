@@ -35,10 +35,10 @@ int main(void) {
   assert(frame.cursor.column == 6);
 
   //----
-  frame.cursor.column = 5;
+  frame.cursor.column = 6;
   main_frame_remove_char(&frame);
   assert(line_eq(frame.line, "hello world"));
-  assert(frame.cursor.column == 4);
+  assert(frame.cursor.column == 5);
   assert(frame.line->prev == NULL);
 
   //----
