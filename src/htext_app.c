@@ -60,7 +60,7 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
   assert(total_lines == main_frame->line_count);
 
   for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
-    my_assert(line->cached_texture.texture == NULL, file, linenum);
+    my_assert(line->texture == NULL, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
   }
 }
@@ -73,17 +73,22 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
 void _assert_line_integrity(State *state, char *file, int linenum);
 #endif
 
-CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
-                                    char *text, SDL_Color color) {
+SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
+                               char *text, SDL_Color color, uint16 *w) {
 
   SDL_Surface *surface = TTF_cpointer(TTF_RenderText_Solid(font, text, color));
-  uint16 w = surface->w;
-  uint16 h = surface->h;
+  *w = surface->w;
   SDL_Texture *texture =
       SDL_cpointer(SDL_CreateTextureFromSurface(renderer, surface));
   SDL_FreeSurface(surface);
+  return texture;
+}
 
-  return (CachedTexture){.texture = texture, .h = h, .w = w};
+CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
+                                    char *text, SDL_Color color) {
+  CachedTexture cached;
+  cached.texture = texture_from_text(renderer, font, text, color, &cached.w);
+  return cached;
 }
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
@@ -127,9 +132,9 @@ Glyph *render_char(State *state, SDL_Renderer *renderer, int ch, int x, int y) {
 }
 
 void line_invalidate_texture(Line *line) {
-  if (line->cached_texture.texture != NULL) {
-    SDL_DestroyTexture(line->cached_texture.texture);
-    line->cached_texture.texture = NULL;
+  if (line->texture != NULL) {
+    SDL_DestroyTexture(line->texture);
+    line->texture = NULL;
   }
 }
 
@@ -183,16 +188,15 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
       render_cursor(renderer, &cursorDest, is_cursor_active);
     }
 
-    if (line->cached_texture.texture == NULL) {
+    if (line->texture == NULL) {
       line->text[line->size] = '\0';
-      line->cached_texture = cached_texture_create(renderer, state->font,
-                                                   line->text, sdlFontColor);
+      line->texture = texture_from_text(renderer, state->font, line->text,
+                                        sdlFontColor, &line->texture_width);
     }
 
-    dest.w = line->cached_texture.w;
+    dest.w = line->texture_width;
 
-    SDL_ccode(
-        SDL_RenderCopy(renderer, line->cached_texture.texture, NULL, &dest));
+    SDL_ccode(SDL_RenderCopy(renderer, line->texture, NULL, &dest));
 
     dest.y += state->font_h;
     dest.x = x_start;
@@ -206,7 +210,7 @@ Line *line_create(MemoryArena *arena) {
   line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
   line->prev = NULL;
   line->next = NULL;
-  line->cached_texture.texture = NULL;
+  line->texture = NULL;
   return line;
 }
 

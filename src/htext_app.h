@@ -112,7 +112,6 @@ enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count};
 typedef struct {
   SDL_Texture* texture;
   uint16 w;
-  uint16 h;
 } CachedTexture;
 
 struct Line;
@@ -124,7 +123,8 @@ typedef struct Line {
   struct Line *prev;
   struct Line *next;
 
-  CachedTexture cached_texture;
+  SDL_Texture* texture;
+  uint16 texture_width;
 } Line;
 
 typedef struct {
