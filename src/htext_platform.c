@@ -15,6 +15,10 @@
 #define DEBUG_FPS 0
 #define DEBUG 1
 
+#if defined(MAP_ANON) && !defined(MAP_ANONYMOUS)
+#define MAP_ANONYMOUS MAP_ANON
+#endif
+
 int getGameLastModificationDate(const char *path, struct stat *fileStat,
                                 time_t *modificationTime) {
   if (stat(path, fileStat) == 0) {

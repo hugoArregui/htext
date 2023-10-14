@@ -1,8 +1,11 @@
 #ifndef __H_TEXT_H_TEXT
 
+#include <SDL2/SDL_render.h>
 #include "htext_platform.h"
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
+
+#define INDEX_SIZE 5000
 
 typedef struct {
   memory_index size;
@@ -104,7 +107,12 @@ inline void endTemporaryMemory(TemporaryMemory temporaryMemory) {
 
 inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
-enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert };
+enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count};
+
+typedef struct {
+  SDL_Texture* texture;
+  int32 w;
+} CachedTexture;
 
 struct Line;
 
@@ -114,16 +122,42 @@ typedef struct Line {
   uint32 size;
   struct Line *prev;
   struct Line *next;
+
+  SDL_Texture* texture;
+  int32 texture_width;
 } Line;
 
 typedef struct {
   Line* line;
+  uint32 line_num;
+  uint32 column;
+} Cursor;
+
+typedef struct {
+  Line* line;
+  uint32 line_count;
+  // NOTE: currently I use this only to optimize the rendering window, so it could be much smaller, some cursor_line +/- amount_of_lines_to_render
+  Line* index[INDEX_SIZE];
+
+  Cursor cursor;
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line* deleted_line;
-  Line* cursor_line;
-  uint32 cursor_pos;
-} Frame;
+} MainFrame;
+
+typedef struct {
+  Line* line;
+  Cursor cursor;
+} ExFrame;
+
+#define ASCII_LOW 32
+#define ASCII_HIGH 126
+
+typedef struct {
+  SDL_Texture* texture;
+  int w;
+  int h;
+} Glyph;
 
 typedef struct {
   int isInitialized;
@@ -131,11 +165,14 @@ typedef struct {
 
   MemoryArena arena;
 
-  Frame main_frame;
-  Frame ex_frame;
+  MainFrame main_frame;
+  ExFrame ex_frame;
 
   TTF_Font *font;
+  Glyph glyph_cache[ASCII_HIGH-ASCII_LOW];
   int32 font_h;
+
+  CachedTexture appModeTextures[AppMode_count];
 } State;
 
 #define __H_TEXT_H_TEXT

@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev
+      - name: report
+        run: |
+          make report
+      - name: build
+        run: |
+          make build
+      - name: test
+        run: |
+          make test
