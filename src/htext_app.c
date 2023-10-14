@@ -414,6 +414,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
 
     state->isInitialized = true;
+    load_file(state); // TODO: remove this
   }
 
   // NOTE(casey): Transient initialization
@@ -613,8 +614,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     int x = margin_x;
     int y = margin_y;
 
-    for (uint64 i = 0; i < strlen(text); ++i) {
-      uint32 ch = text[i];
+    for (uint17 i = 0; i < strlen(text); ++i) {
+      char ch = text[i];
 
       if (ch == '\n') {
         y += state->font_h;
