@@ -109,13 +109,13 @@ const char *state_get_mode_name(State *state) {
   }
 }
 
-void render_cursor(SDL_Renderer *renderer, SDL_Rect dest, bool32 fill) {
+void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
   SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
   if (fill) {
-    SDL_ccode(SDL_RenderFillRect(renderer, &dest));
+    SDL_ccode(SDL_RenderFillRect(renderer, dest));
   } else {
-    SDL_ccode(SDL_RenderDrawRect(renderer, &dest));
+    SDL_ccode(SDL_RenderDrawRect(renderer, dest));
   }
 }
 
@@ -174,14 +174,14 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
 
   SDL_Rect dest;
   dest.x = x_start;
-  dest.w = cursor_w;
   dest.y = y_start;
+  dest.w = cursor_w;
   dest.h = state->font_h;
   for (Line *line = start_line; line != end_line; line = line->next) {
-    for (uint64 i = 0; i < line->size; ++i) {
-      uint32 ch = line->text[i];
+    for (uint16 i = 0; i < line->size; ++i) {
+      char ch = line->text[i];
       if (line == cursor.line && i == cursor.column) {
-        render_cursor(renderer, dest, is_cursor_active);
+        render_cursor(renderer, &dest, is_cursor_active);
         cursor_rendered = true;
       }
 
@@ -189,7 +189,7 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
     }
 
     if (!cursor_rendered && line == cursor.line) {
-      render_cursor(renderer, dest, is_cursor_active);
+      render_cursor(renderer, &dest, is_cursor_active);
     }
 
     dest.y += state->font_h;
