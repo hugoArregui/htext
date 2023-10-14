@@ -2,8 +2,14 @@ OPTIMIZATIONS=-O3
 DEBUG=-ggdb3
 CC=clang
 
-CFLAGS=-Wall -Wextra -std=c17 -pedantic -ggdb -Wno-gnu-empty-initializer `pkg-config --cflags sdl2`
+# -D_DEFAULT_SOURCE so ubuntu allows MAP_ANONYMOUS (this doesn't happen in arch)
+# see https://man7.org/linux/man-pages/man2/mmap.2.html
+CFLAGS=-Wall -Wextra -std=c17 -pedantic -ggdb -Wno-gnu-empty-initializer `pkg-config --cflags sdl2` -D_DEFAULT_SOURCE
 LIBS=`pkg-config --libs sdl2 SDL2_ttf SDL2_image`
+
+report:
+	clang --version
+	uname -r
 
 build: clean
 	mkdir -p build/
@@ -17,3 +23,5 @@ test: clean
 
 clean:
 	rm -f build/*
+
+.DEFAULT_GOAL := build

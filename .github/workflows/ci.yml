@@ -14,6 +14,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -qq libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev
+      - name: report
+        run: |
+          make report
       - name: build
         run: |
           make build
