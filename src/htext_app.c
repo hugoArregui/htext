@@ -6,9 +6,11 @@
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_main.h>
+#include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_scancode.h>
+#include <SDL2/SDL_surface.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -18,23 +20,17 @@
 // TODO load and write file
 // TODO better debug logging
 
-const char *normalModeName = "NORMAL";
-const char *exModeName = "EX";
-const char *insertModeName = "INSERT";
-
 const uint32 backgroundColor = 0x00000000;
 const uint32 fontColor = 0xFFFFFF00;
+const uint32 modeColor = 0xFF000000;
 const uint32 cursorColor = fontColor | 0x9F;
 
-// NOTE: I use this commented code to set a breakpoint when an assert is
-// triggered
-/* #define assert(cond) my_assert(cond, __FILE__, __LINE__) */
-/* void my_assert(bool32 cond, char *file, int linenum) { */
-/*   if (!cond) { */
-/*     printf("%s:%d\n", file, linenum); */
-/*     exit(1); */
-/*   } */
-/* } */
+void my_assert(bool32 cond, char *file, int linenum) {
+  if (!cond) {
+    printf("%s:%d\n", file, linenum);
+    exit(1);
+  }
+}
 
 #define ASSERT_LINE_INTEGRITY 1
 
@@ -50,28 +46,13 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
   // TODO check cursor line_num integrity
   for (Line *line = main_frame->line; line != NULL; line = line->next) {
     total_lines++;
-    if (line->prev == line) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->prev != line);
-    }
-    if (line->next == line) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->next != line);
-    }
-    if (line->prev != prev_line) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->prev == prev_line);
-    }
-    if (line->max_size == 0) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->max_size > 0);
-    }
+    my_assert(line->prev != line, file, linenum);
+    my_assert(line->next != line, file, linenum);
+    my_assert(line->prev == prev_line, file, linenum);
+    my_assert(line->max_size > 0, file, linenum);
 
     for (uint32 i = 0; i < line->size; ++i) {
-      if (line->text[i] < 32) {
-        printf("%s:%d\n", file, linenum);
-        assert(line->text[i] > 32);
-      }
+      my_assert(line->text[i] > 32, file, linenum);
     }
     prev_line = line;
   }
@@ -79,34 +60,30 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
   assert(total_lines == main_frame->line_count);
 
   for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
-    if (line->max_size == 0) {
-      printf("%s:%d\n", file, linenum);
-      assert(line->max_size > 0);
-    }
+    my_assert(line->cached_texture.texture == NULL, file, linenum);
+    my_assert(line->max_size > 0, file, linenum);
   }
 }
 
 void _assert_line_integrity(State *state, char *file, int linenum) {
-  assert(state->ex_frame.line->next == NULL);
+  my_assert(state->ex_frame.line->next == NULL, file, linenum);
   assert_main_frame_integrity(&state->main_frame, file, linenum);
 }
 #else
 void _assert_line_integrity(State *state, char *file, int linenum);
 #endif
 
-const char *state_get_mode_name(State *state) {
-  switch (state->mode) {
-  case AppMode_normal:
-    return normalModeName;
-  case AppMode_ex:
-    return exModeName;
-  case AppMode_insert:
-    return insertModeName;
-  default: {
-    assert(false);
-    break;
-  }
-  }
+CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
+                                    char *text, SDL_Color color) {
+
+  SDL_Surface *surface = TTF_cpointer(TTF_RenderText_Solid(font, text, color));
+  uint16 w = surface->w;
+  uint16 h = surface->h;
+  SDL_Texture *texture =
+      SDL_cpointer(SDL_CreateTextureFromSurface(renderer, surface));
+  SDL_FreeSurface(surface);
+
+  return (CachedTexture){.texture = texture, .h = h, .w = w};
 }
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
@@ -149,6 +126,13 @@ Glyph *render_char(State *state, SDL_Renderer *renderer, int ch, int x, int y) {
   return glyph;
 }
 
+void line_invalidate_texture(Line *line) {
+  if (line->cached_texture.texture != NULL) {
+    SDL_DestroyTexture(line->cached_texture.texture);
+    line->cached_texture.texture = NULL;
+  }
+}
+
 void render_text(State *state, SDL_Renderer *renderer, const char *text,
                  int len, int x, int y) {
   for (int i = 0; i < len; ++i) {
@@ -170,27 +154,45 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
                   bool32 is_cursor_active) {
   const int cursor_w = state->font_h / 2;
-  bool32 cursor_rendered = false;
 
   SDL_Rect dest;
   dest.x = x_start;
   dest.y = y_start;
-  dest.w = cursor_w;
   dest.h = state->font_h;
+
+  SDL_Color sdlFontColor = {UNHEX(fontColor)};
   for (Line *line = start_line; line != end_line; line = line->next) {
-    for (uint16 i = 0; i < line->size; ++i) {
-      char ch = line->text[i];
-      if (line == cursor.line && i == cursor.column) {
-        render_cursor(renderer, &dest, is_cursor_active);
-        cursor_rendered = true;
+    if (line->size == 0) {
+      dest.y += state->font_h;
+      continue;
+    }
+
+    if (line == cursor.line) {
+      uint16 cursor_x = dest.x;
+      for (uint16 i = 0; i < cursor.column; ++i) {
+        Glyph *glyph = state->glyph_cache + (line->text[i] - ASCII_LOW);
+        assert(glyph != NULL);
+        cursor_x += glyph->w;
       }
 
-      dest.x += render_char(state, renderer, ch, dest.x, dest.y)->w;
+      SDL_Rect cursorDest;
+      cursorDest.x = cursor_x;
+      cursorDest.y = dest.y;
+      cursorDest.h = state->font_h;
+      cursorDest.w = cursor_w;
+      render_cursor(renderer, &cursorDest, is_cursor_active);
     }
 
-    if (!cursor_rendered && line == cursor.line) {
-      render_cursor(renderer, &dest, is_cursor_active);
+    if (line->cached_texture.texture == NULL) {
+      line->text[line->size] = '\0';
+      line->cached_texture = cached_texture_create(renderer, state->font,
+                                                   line->text, sdlFontColor);
     }
+
+    dest.w = line->cached_texture.w;
+
+    SDL_ccode(
+        SDL_RenderCopy(renderer, line->cached_texture.texture, NULL, &dest));
 
     dest.y += state->font_h;
     dest.x = x_start;
@@ -204,6 +206,7 @@ Line *line_create(MemoryArena *arena) {
   line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
   line->prev = NULL;
   line->next = NULL;
+  line->cached_texture.texture = NULL;
   return line;
 }
 
@@ -214,6 +217,7 @@ void frame_insert_text(Cursor *cursor, char *text, uint32 text_size) {
   memcpy(line->text + cursor->column + text_size, line->text + cursor->column,
          line->size - cursor->column);
   memcpy(line->text + cursor->column, text, text_size);
+  line_invalidate_texture(line);
   line->size += text_size;
   cursor->column += text_size;
 }
@@ -255,6 +259,7 @@ void main_frame_remove_char(MainFrame *frame) {
       if (frame->deleted_line != NULL) {
         line_to_remove->next = NULL;
         line_to_remove->prev = NULL;
+        line_invalidate_texture(line_to_remove);
         line_insert_next(line_to_remove, frame->deleted_line);
       }
       frame->deleted_line = line_to_remove;
@@ -268,6 +273,8 @@ void main_frame_remove_char(MainFrame *frame) {
     frame->cursor.line->size--;
     frame->cursor.column--;
   }
+
+  line_invalidate_texture(frame->cursor.line);
 }
 
 void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
@@ -378,7 +385,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     state->mode = AppMode_normal;
 
     // NOTE: this is executed once
-    // TODO: this should be cleared at exit, but do we care?
+    // TODO: there are a bunch of things that should be cleared here at exit,
+    // not sure if we care
     state->font = TTF_cpointer(
         TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
 
@@ -411,6 +419,16 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           .line = line,
           .cursor = (Cursor){.line = line, .column = 0},
       };
+    }
+
+    {
+      SDL_Color sdlModeColor = {UNHEX(modeColor)};
+      state->appModeTextures[AppMode_ex] = cached_texture_create(
+          buffer->renderer, state->font, "EX", sdlModeColor);
+      state->appModeTextures[AppMode_normal] = cached_texture_create(
+          buffer->renderer, state->font, "NORMAL", sdlModeColor);
+      state->appModeTextures[AppMode_insert] = cached_texture_create(
+          buffer->renderer, state->font, "INSERT", sdlModeColor);
     }
 
     state->isInitialized = true;
@@ -582,10 +600,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   // render mode name
   {
-    const char *modeName = state_get_mode_name(state);
-    render_text(state, buffer->renderer, modeName, strlen(modeName),
-                buffer->width - buffer->width * 0.05,
-                buffer->height - state->font_h - 0.03 * buffer->height);
+    assert(state->mode < AppMode_count);
+    CachedTexture *texture = state->appModeTextures + state->mode;
+    SDL_Rect dest;
+    dest.x = buffer->width - buffer->width * 0.01 - texture->w;
+    dest.y = buffer->height - state->font_h - 0.03 * buffer->height;
+    dest.w = texture->w;
+    dest.h = state->font_h;
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, texture->texture, NULL, &dest));
   }
 
   if (state->mode == AppMode_ex) {

@@ -107,7 +107,13 @@ inline void endTemporaryMemory(TemporaryMemory temporaryMemory) {
 
 inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
-enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert };
+enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count};
+
+typedef struct {
+  SDL_Texture* texture;
+  uint16 w;
+  uint16 h;
+} CachedTexture;
 
 struct Line;
 
@@ -117,6 +123,8 @@ typedef struct Line {
   uint32 size;
   struct Line *prev;
   struct Line *next;
+
+  CachedTexture cached_texture;
 } Line;
 
 typedef struct {
@@ -163,6 +171,8 @@ typedef struct {
   TTF_Font *font;
   Glyph glyph_cache[ASCII_HIGH-ASCII_LOW];
   int32 font_h;
+
+  CachedTexture appModeTextures[AppMode_count];
 } State;
 
 #define __H_TEXT_H_TEXT
