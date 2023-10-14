@@ -25,18 +25,16 @@ const uint32 fontColor = 0xFFFFFF00;
 const uint32 modeColor = 0xFF000000;
 const uint32 cursorColor = fontColor | 0x9F;
 
-void my_assert(bool32 cond, char *file, int linenum) {
-  if (!cond) {
-    printf("%s:%d\n", file, linenum);
-    exit(1);
-  }
-}
-
 #define ASSERT_LINE_INTEGRITY 1
-
 #if ASSERT_LINE_INTEGRITY
 #define assert_line_integrity(state)                                           \
   _assert_line_integrity(state, __FILE__, __LINE__)
+
+#define my_assert(cond, file, linenum)                                         \
+  if (!(cond)) {                                                               \
+    printf("%s:%d\n", file, linenum);                                          \
+    assert(cond);                                                              \
+  }
 
 void assert_main_frame_integrity(MainFrame *main_frame, char *file,
                                  int linenum) {
@@ -70,7 +68,7 @@ void _assert_line_integrity(State *state, char *file, int linenum) {
   assert_main_frame_integrity(&state->main_frame, file, linenum);
 }
 #else
-void _assert_line_integrity(State *state, char *file, int linenum);
+#define assert_line_integrity(state) (void)state
 #endif
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
@@ -167,11 +165,6 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
 
   SDL_Color sdlFontColor = {UNHEX(fontColor)};
   for (Line *line = start_line; line != end_line; line = line->next) {
-    if (line->size == 0) {
-      dest.y += state->font_h;
-      continue;
-    }
-
     if (line == cursor.line) {
       uint16 cursor_x = dest.x;
       for (uint16 i = 0; i < cursor.column; ++i) {
@@ -188,15 +181,16 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
       render_cursor(renderer, &cursorDest, is_cursor_active);
     }
 
-    if (line->texture == NULL) {
-      line->text[line->size] = '\0';
-      line->texture = texture_from_text(renderer, state->font, line->text,
-                                        sdlFontColor, &line->texture_width);
+    if (line->size > 0) {
+      if (line->texture == NULL) {
+        line->text[line->size] = '\0';
+        line->texture = texture_from_text(renderer, state->font, line->text,
+                                          sdlFontColor, &line->texture_width);
+      }
+
+      dest.w = line->texture_width;
+      SDL_ccode(SDL_RenderCopy(renderer, line->texture, NULL, &dest));
     }
-
-    dest.w = line->texture_width;
-
-    SDL_ccode(SDL_RenderCopy(renderer, line->texture, NULL, &dest));
 
     dest.y += state->font_h;
     dest.x = x_start;
@@ -214,7 +208,7 @@ Line *line_create(MemoryArena *arena) {
   return line;
 }
 
-void frame_insert_text(Cursor *cursor, char *text, uint32 text_size) {
+void cursor_insert_text(Cursor *cursor, char *text, uint32 text_size) {
   Line *line = cursor->line;
 
   assert(line->max_size >= (line->size + text_size));
@@ -241,6 +235,7 @@ void main_frame_remove_char(MainFrame *frame) {
   if (frame->cursor.column == 0) {
     if (frame->cursor.line->prev != NULL) {
       Line *line_to_remove = frame->cursor.line;
+      line_invalidate_texture(line_to_remove);
 
       // we remove line_to_remove
       frame->cursor.line = line_to_remove->prev;
@@ -260,13 +255,12 @@ void main_frame_remove_char(MainFrame *frame) {
         frame->cursor.line->size += line_to_remove->size;
       }
 
-      if (frame->deleted_line != NULL) {
-        line_to_remove->next = NULL;
-        line_to_remove->prev = NULL;
-        line_invalidate_texture(line_to_remove);
-        line_insert_next(line_to_remove, frame->deleted_line);
+      if (frame->deleted_line == NULL) {
+        frame->deleted_line = line_to_remove;
+        frame->deleted_line->next = NULL;
+      } else {
+        line_insert_next(frame->deleted_line, line_to_remove);
       }
-      frame->deleted_line = line_to_remove;
       main_frame_reindex(frame);
     }
   } else {
@@ -358,7 +352,7 @@ int load_file(State *state) {
     if (c == '\n') {
       main_frame_insert_new_line(&state->arena, &state->main_frame);
     } else {
-      frame_insert_text(&state->main_frame.cursor, &c, 1);
+      cursor_insert_text(&state->main_frame.cursor, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
@@ -436,7 +430,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
 
     state->isInitialized = true;
-    load_file(state); // TODO: remove this
   }
 
   // NOTE(casey): Transient initialization
@@ -554,11 +547,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_ex: {
         uint32 text_size = strlen(event.text.text);
-        frame_insert_text(&ex_frame->cursor, event.text.text, text_size);
+        cursor_insert_text(&ex_frame->cursor, event.text.text, text_size);
       } break;
       case AppMode_insert: {
         uint32 text_size = strlen(event.text.text);
-        frame_insert_text(&main_frame->cursor, event.text.text, text_size);
+        cursor_insert_text(&main_frame->cursor, event.text.text, text_size);
       } break;
       default:
         assert(false);
