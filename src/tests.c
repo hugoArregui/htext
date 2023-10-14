@@ -7,26 +7,22 @@ int main(void) {
 
   uint64 totalSize = Megabytes(256);
   // NOTE: MAP_ANONYMOUS content initialized to zero
-  void* gameMemoryBlock =
-      mmap(baseAddress, totalSize, PROT_READ | PROT_WRITE,
-           MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  void *gameMemoryBlock = mmap(baseAddress, totalSize, PROT_READ | PROT_WRITE,
+                               MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   assert(gameMemoryBlock != MAP_FAILED);
 
   MemoryArena arena;
 
   initializeArena(&arena, totalSize, gameMemoryBlock);
 
-
   Line *line = line_create(&arena);
-  MainFrame frame =
-    (MainFrame){.line = line,
-                      .cursor = (Cursor){.line = line, .column = 0},
-                      .line_count = 1};
+  MainFrame frame = (MainFrame){.line = line,
+                                .cursor = (Cursor){.line = line, .column = 0},
+                                .line_count = 1};
 
   cursor_insert_text(&frame.cursor, "hello world", 11);
   assert(frame.line == frame.cursor.line);
-  assert(frame.cursor.column
-         == 11);
+  assert(frame.cursor.column == 11);
   assert(frame.line->prev == NULL);
   assert(frame.line->size == 11);
 
@@ -98,7 +94,7 @@ int main(void) {
   assert(frame.line->next->next == NULL);
   assert(frame.line->next == frame.cursor.line);
 
-  Line* deleted_line = frame.deleted_line;
+  Line *deleted_line = frame.deleted_line;
 
   //----
   frame.cursor.column = 5;
@@ -119,8 +115,6 @@ int main(void) {
   assert(frame.line->next->prev == frame.line);
   assert(frame.line->next->next->prev == frame.line->next);
   assert(frame.line->next->next == frame.cursor.line);
-
-
 
   return 0;
 }
