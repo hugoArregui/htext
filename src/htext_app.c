@@ -41,18 +41,21 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
   Line *prev_line = NULL;
 
   uint32 total_lines = 0;
-  // TODO check cursor line_num integrity
   for (Line *line = main_frame->line; line != NULL; line = line->next) {
-    total_lines++;
     my_assert(line->prev != line, file, linenum);
     my_assert(line->next != line, file, linenum);
     my_assert(line->prev == prev_line, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
 
+    if (line == main_frame->cursor.line) {
+      my_assert(total_lines == main_frame->cursor.line_num, file, linenum)
+    }
+
     for (uint32 i = 0; i < line->size; ++i) {
       my_assert(line->text[i] > 32, file, linenum);
     }
     prev_line = line;
+    total_lines++;
   }
 
   assert(total_lines == main_frame->line_count);

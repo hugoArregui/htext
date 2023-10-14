@@ -42,7 +42,7 @@ typedef double real64;
 #define PLAYBACK_PLAYING 2
 
 #define DEBUG_WINDOW 0
-#define DEBUG_PLAYBACK PLAYBACK_PLAYING
+/* #define DEBUG_PLAYBACK PLAYBACK_PLAYING */
 
 typedef struct {
   uint64 totalSize;
