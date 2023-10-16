@@ -69,7 +69,7 @@ void *pushSize(MemoryArena *arena, size_t size, size_t alignment) {
   return result;
 }
 
-inline char *pushString(MemoryArena *arena, char *source) {
+char *pushString(MemoryArena *arena, char *source) {
   uint32 size = strlen(source) + 1;
   char *dest = (char *)pushSize(arena, size, DEFAULT_ALIGMENT);
   for (uint32 charIndex = 0; charIndex < size; ++charIndex) {
@@ -154,12 +154,6 @@ typedef struct {
 #define ASCII_HIGH 126
 
 typedef struct {
-  SDL_Texture* texture;
-  int w;
-  int h;
-} Glyph;
-
-typedef struct {
   int isInitialized;
   enum AppMode mode;
 
@@ -169,10 +163,15 @@ typedef struct {
   ExFrame ex_frame;
 
   TTF_Font *font;
-  Glyph glyph_cache[ASCII_HIGH-ASCII_LOW];
+  int glyph_width[ASCII_HIGH-ASCII_LOW];
   int32 font_h;
 
   CachedTexture appModeTextures[AppMode_count];
+
+  char *filename;
+
+  SDL_Texture* ex_prefix_texture;
+  int ex_prefix_texture_width;
 } State;
 
 #define __H_TEXT_H_TEXT

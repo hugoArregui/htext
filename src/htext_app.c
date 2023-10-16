@@ -17,10 +17,17 @@
 #include <string.h>
 #include <sys/types.h>
 
-const uint32 backgroundColor = 0x00000000;
-const uint32 fontColor = 0xFFFFFF00;
-const uint32 modeColor = 0xFF000000;
-const uint32 cursorColor = fontColor | 0x9F;
+#define BG_COLOR 0x00000000
+#define EDITOR_FONT_COLOR 0x08a00300
+#define CURSOR_COLOR 0xFFFFFF9F
+
+#define MODELINE_BG_COLOR 0x595959FF
+#define MODELINE_FONT_COLOR 0xFFFFFF00
+
+#define EX_FONT_COLOR 0xFFFFFF00
+
+// TODO viewport, and change when cursor hits the top or the bottom
+// TODO modeline with filename and mode
 
 #define ASSERT_LINE_INTEGRITY 1
 #if ASSERT_LINE_INTEGRITY
@@ -93,7 +100,7 @@ CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
-  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
+  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(CURSOR_COLOR)));
   if (fill) {
     SDL_ccode(SDL_RenderFillRect(renderer, dest));
   } else {
@@ -118,19 +125,6 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-Glyph *render_char(State *state, SDL_Renderer *renderer, int ch, int x, int y) {
-  Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
-  assert(glyph != NULL);
-
-  SDL_Rect dest;
-  dest.x = x;
-  dest.y = y;
-  dest.w = glyph->w;
-  dest.h = glyph->h;
-  SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
-  return glyph;
-}
-
 void line_invalidate_texture(Line *line) {
   if (line->texture != NULL) {
     SDL_DestroyTexture(line->texture);
@@ -138,26 +132,9 @@ void line_invalidate_texture(Line *line) {
   }
 }
 
-void render_text(State *state, SDL_Renderer *renderer, const char *text,
-                 int len, int x, int y) {
-  for (int i = 0; i < len; ++i) {
-    char ch = text[i];
-    Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
-    assert(glyph != NULL);
-
-    SDL_Rect dest;
-    dest.x = x;
-    dest.y = y;
-    dest.w = glyph->w;
-    dest.h = glyph->h;
-    SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
-    x += glyph->w;
-  }
-}
-
 void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
-                  bool32 is_cursor_active) {
+                  bool32 is_cursor_active, uint32 color) {
   const int cursor_w = state->font_h / 2;
 
   SDL_Rect dest;
@@ -165,14 +142,12 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
   dest.y = y_start;
   dest.h = state->font_h;
 
-  SDL_Color sdlFontColor = {UNHEX(fontColor)};
+  SDL_Color sdlFontColor = {UNHEX(color)};
   for (Line *line = start_line; line != end_line; line = line->next) {
     if (line == cursor.line) {
       uint16 cursor_x = dest.x;
       for (uint16 i = 0; i < cursor.column; ++i) {
-        Glyph *glyph = state->glyph_cache + (line->text[i] - ASCII_LOW);
-        assert(glyph != NULL);
-        cursor_x += glyph->w;
+        cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
       }
 
       SDL_Rect cursorDest;
@@ -329,12 +304,15 @@ void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
 }
 
 void ex_frame_remove_char(ExFrame *frame) {
-  assert(frame->cursor.column <= frame->cursor.line->size);
-  memcpy(frame->cursor.line->text + frame->cursor.column,
-         frame->cursor.line->text + frame->cursor.column + 1,
-         frame->cursor.line->size - frame->cursor.column);
-  frame->cursor.line->size--;
-  frame->cursor.column--;
+  if (frame->cursor.column > 0) {
+    assert(frame->cursor.column <= frame->cursor.line->size);
+    memcpy(frame->cursor.line->text + frame->cursor.column,
+           frame->cursor.line->text + frame->cursor.column + 1,
+           frame->cursor.line->size - frame->cursor.column);
+    frame->cursor.line->size--;
+    frame->cursor.column--;
+    line_invalidate_texture(frame->cursor.line);
+  }
 }
 
 #if DEBUG_PLAYBACK == PLAYBACK_RECORDING
@@ -363,8 +341,8 @@ int poll_event(Input *input, SDL_Event *event) {
 }
 #endif
 
-int load_file(State *state) {
-  FILE *f = fopen("src/htext_app.c", "r");
+int load_file(State *state, char *filename) {
+  FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
   }
@@ -389,6 +367,8 @@ int load_file(State *state) {
   state->main_frame.cursor.line_num = 0;
   state->main_frame.cursor.column = 0;
   main_frame_reindex(&state->main_frame);
+  fclose(f);
+  state->filename = pushString(&state->arena, filename);
   return 0;
 }
 
@@ -402,7 +382,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   SDL_RenderClear(buffer->debugRenderer);
 #endif
 
-  SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(backgroundColor)));
+  SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(BG_COLOR)));
   SDL_ccode(SDL_RenderClear(buffer->renderer));
 
   State *state = (State *)memory->permanentStorage;
@@ -418,14 +398,21 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     state->font_h = TTF_FontHeight(state->font);
 
-    SDL_Color sdlFontColor = {UNHEX(fontColor)};
+    SDL_Color sdlFontColor = {UNHEX(EDITOR_FONT_COLOR)};
     for (int i = ASCII_LOW; i < ASCII_HIGH; ++i) {
       SDL_Surface *surface =
           TTF_cpointer(TTF_RenderGlyph_Solid(state->font, i, sdlFontColor));
-      SDL_Texture *texture =
+      state->glyph_width[i - ASCII_LOW] = surface->w;
+      SDL_FreeSurface(surface);
+    }
+
+    {
+      SDL_Color color = {UNHEX(EX_FONT_COLOR)};
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', color));
+      state->ex_prefix_texture_width = surface->w;
+      state->ex_prefix_texture =
           SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, surface));
-      state->glyph_cache[i - ASCII_LOW] =
-          (Glyph){.texture = texture, .w = surface->w, .h = surface->h};
       SDL_FreeSurface(surface);
     }
 
@@ -448,14 +435,16 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
 
     {
-      SDL_Color sdlModeColor = {UNHEX(modeColor)};
+      SDL_Color modeColor = {UNHEX(MODELINE_FONT_COLOR)};
       state->appModeTextures[AppMode_ex] = cached_texture_create(
-          buffer->renderer, state->font, "EX", sdlModeColor);
+          buffer->renderer, state->font, "EX | ", modeColor);
       state->appModeTextures[AppMode_normal] = cached_texture_create(
-          buffer->renderer, state->font, "NORMAL", sdlModeColor);
+          buffer->renderer, state->font, "NORMAL | ", modeColor);
       state->appModeTextures[AppMode_insert] = cached_texture_create(
-          buffer->renderer, state->font, "INSERT", sdlModeColor);
+          buffer->renderer, state->font, "INSERT | ", modeColor);
     }
+
+    state->filename = NULL;
 
     state->isInitialized = true;
   }
@@ -492,7 +481,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           if (line_eq(ex_frame->line, "quit") || line_eq(ex_frame->line, "q")) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
-            load_file(state);
+            load_file(state, "src/htext_app.c");
             assert_line_integrity(state);
           } else if (line_eq(ex_frame->line, "clear")) {
             main_frame_clear(main_frame);
@@ -597,12 +586,12 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   // -------- rendering
   int main_frame_start_y = buffer->height * 0.01;
-  int ex_frame_start_y = buffer->height - state->font_h - 0.01 * buffer->height;
+  int modeline_frame_start_y = buffer->height - state->font_h * 3;
+  int ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
 
   // render main buffer
-
   {
-    int h = ex_frame_start_y - main_frame_start_y;
+    int h = modeline_frame_start_y - main_frame_start_y;
     uint32 lines_to_render = h / state->font_h;
     Line *start_line = main_frame->line;
     assert(start_line != NULL);
@@ -624,32 +613,56 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     render_lines(state, buffer->renderer, start_line, end_line,
                  main_frame->cursor, buffer->width * 0.01, main_frame_start_y,
-                 state->mode != AppMode_ex);
+                 state->mode != AppMode_ex, EDITOR_FONT_COLOR);
   }
 
-  // render mode name
+  // render mode line
   {
     assert(state->mode < AppMode_count);
     CachedTexture *texture = state->appModeTextures + state->mode;
     SDL_Rect dest;
-    dest.x = buffer->width - buffer->width * 0.01 - texture->w;
-    dest.y = buffer->height - state->font_h - 0.03 * buffer->height;
-    dest.w = texture->w;
+    dest.y = modeline_frame_start_y;
     dest.h = state->font_h;
+    dest.x = 0;
+    dest.w = buffer->width;
+
+    SDL_ccode(
+        SDL_SetRenderDrawColor(buffer->renderer, UNHEX(MODELINE_BG_COLOR)));
+    SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+
+    dest.x = buffer->width * 0.01;
+    dest.w = texture->w;
     SDL_ccode(SDL_RenderCopy(buffer->renderer, texture->texture, NULL, &dest));
+
+    dest.x += dest.w;
+
+    if (state->filename != NULL) {
+      // TODO: this could be cached
+      SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
+      SDL_Texture *filename_texture = texture_from_text(
+          buffer->renderer, state->font, state->filename, color, &dest.w);
+      SDL_RenderCopy(buffer->renderer, filename_texture, NULL, &dest);
+      SDL_DestroyTexture(filename_texture);
+    }
   }
 
   if (state->mode == AppMode_ex) {
     assert(ex_frame->line->next == NULL);
 
-    int x = 0.01 * buffer->width;
+    int x = 0.005 * buffer->width;
 
-    // first render ':'
-    x += render_char(state, buffer->renderer, ':', x, ex_frame_start_y)->w;
+    SDL_Rect dest;
+    dest.x = x;
+    dest.y = ex_frame_start_y;
+    dest.h = state->font_h;
+    dest.w = state->ex_prefix_texture_width;
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, state->ex_prefix_texture, NULL,
+                             &dest));
+    dest.x += dest.w;
 
     render_lines(state, buffer->renderer, ex_frame->line, NULL,
-                 ex_frame->cursor, x, ex_frame_start_y,
-                 state->mode == AppMode_ex);
+                 ex_frame->cursor, dest.x, dest.y, state->mode == AppMode_ex,
+                 EX_FONT_COLOR);
   }
 
 #if DEBUG_WINDOW
@@ -666,7 +679,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.h = state->font_h;
 
     {
-      sprintf(text, "Cursor position: %d", main_frame->cursor.column);
+      sprintf(text, "Main frame cursor position: %d",
+              main_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
@@ -689,6 +703,15 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     if (main_frame->line->size > 0) {
       sprintf(text, "Line size: %d", main_frame->line->size);
 
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
+    }
+
+    {
+      sprintf(text, "Ex frame cursor position: %d", ex_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
