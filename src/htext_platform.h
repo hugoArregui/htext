@@ -77,7 +77,7 @@ typedef struct {
   char text[32];
 
 #if DEBUG_RECORDING || DEBUG_PLAYBACK
-  FILE* playbackFile;
+  FILE *playbackFile;
 #endif
 } Input;
 

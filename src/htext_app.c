@@ -1,5 +1,4 @@
 #include "htext_app.h"
-#include "htext_la.h"
 #include "htext_sdl.h"
 #include <SDL2/SDL_blendmode.h>
 #include <SDL2/SDL_events.h>

@@ -215,7 +215,6 @@ int main(void) {
   fclose(input.playbackFile);
 #endif
 
-
   SDL_Quit();
 
   munmap(platformState.gameMemoryBlock, platformState.totalSize);

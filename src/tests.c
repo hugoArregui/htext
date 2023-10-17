@@ -16,9 +16,10 @@ int main(void) {
   initializeArena(&arena, totalSize, gameMemoryBlock);
 
   Line *line = line_create(&arena);
-  EditorFrame frame = (EditorFrame){.line = line,
-                                .cursor = (Cursor){.line = line, .column = 0},
-                                .line_count = 1};
+  EditorFrame frame =
+      (EditorFrame){.line = line,
+                    .cursor = (Cursor){.line = line, .column = 0},
+                    .line_count = 1};
 
   cursor_insert_text(&frame.cursor, "hello world", 11);
   assert(frame.line == frame.cursor.line);

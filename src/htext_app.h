@@ -1,7 +1,7 @@
 #ifndef __H_TEXT_H_TEXT
 
-#include <SDL2/SDL_render.h>
 #include "htext_platform.h"
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdlib.h>
 
@@ -107,10 +107,10 @@ inline void endTemporaryMemory(TemporaryMemory temporaryMemory) {
 
 inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
-enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count};
+enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count };
 
 typedef struct {
-  SDL_Texture* texture;
+  SDL_Texture *texture;
   int32 w;
 } CachedTexture;
 
@@ -123,21 +123,22 @@ typedef struct Line {
   struct Line *prev;
   struct Line *next;
 
-  SDL_Texture* texture;
+  SDL_Texture *texture;
   int32 texture_width;
 } Line;
 
 typedef struct {
-  Line* line;
+  Line *line;
   uint32 line_num;
   uint32 column;
 } Cursor;
 
 typedef struct {
-  Line* line;
+  Line *line;
   uint32 line_count;
-  // NOTE: currently I use this only to optimize the rendering window, so it could be much smaller, some cursor_line +/- amount_of_lines_to_render
-  Line* index[INDEX_SIZE];
+  // NOTE: currently I use this only to optimize the rendering window, so it
+  // could be much smaller, some cursor_line +/- amount_of_lines_to_render
+  Line *index[INDEX_SIZE];
 
   Cursor cursor;
 
@@ -145,11 +146,11 @@ typedef struct {
   uint32 viewport_length;
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
-  Line* deleted_line;
+  Line *deleted_line;
 } EditorFrame;
 
 typedef struct {
-  Line* line;
+  Line *line;
   Cursor cursor;
 } ExFrame;
 
@@ -166,7 +167,7 @@ typedef struct {
   ExFrame ex_frame;
 
   TTF_Font *font;
-  int glyph_width[ASCII_HIGH-ASCII_LOW];
+  int glyph_width[ASCII_HIGH - ASCII_LOW];
   int32 font_h;
 
   CachedTexture appModeTextures[AppMode_count];
@@ -175,7 +176,7 @@ typedef struct {
   SDL_Texture *filename_texture;
   int filename_texture_width;
 
-  SDL_Texture* ex_prefix_texture;
+  SDL_Texture *ex_prefix_texture;
   int ex_prefix_texture_width;
 } State;
 
