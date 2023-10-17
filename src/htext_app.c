@@ -17,10 +17,14 @@
 #include <string.h>
 #include <sys/types.h>
 
-const uint32 backgroundColor = 0x00000000;
-const uint32 fontColor = 0xFFFFFF00;
-const uint32 modeColor = 0xFF000000;
-const uint32 cursorColor = fontColor | 0x9F;
+#define BG_COLOR 0x00000000
+#define EDITOR_FONT_COLOR 0x08a00300
+#define CURSOR_COLOR 0xFFFFFF9F
+
+#define MODELINE_BG_COLOR 0x595959FF
+#define MODELINE_FONT_COLOR 0xFFFFFF00
+
+#define EX_FONT_COLOR 0xFFFFFF00
 
 #define ASSERT_LINE_INTEGRITY 1
 #if ASSERT_LINE_INTEGRITY
@@ -33,19 +37,19 @@ const uint32 cursorColor = fontColor | 0x9F;
     assert(cond);                                                              \
   }
 
-void assert_main_frame_integrity(MainFrame *main_frame, char *file,
-                                 int linenum) {
+void assert_editor_frame_integrity(EditorFrame *editor_frame, char *file,
+                                   int linenum) {
   Line *prev_line = NULL;
 
   uint32 line_num = 0;
-  for (Line *line = main_frame->line; line != NULL; line = line->next) {
+  for (Line *line = editor_frame->line; line != NULL; line = line->next) {
     my_assert(line->prev != line, file, linenum);
     my_assert(line->next != line, file, linenum);
     my_assert(line->prev == prev_line, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
 
-    if (line == main_frame->cursor.line) {
-      my_assert(line_num == main_frame->cursor.line_num, file, linenum)
+    if (line == editor_frame->cursor.line) {
+      my_assert(line_num == editor_frame->cursor.line_num, file, linenum)
     }
 
     for (uint32 i = 0; i < line->size; ++i) {
@@ -55,9 +59,10 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
     line_num++;
   }
 
-  assert(line_num == main_frame->line_count);
+  assert(line_num == editor_frame->line_count);
 
-  for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
+  for (Line *line = editor_frame->deleted_line; line != NULL;
+       line = line->next) {
     my_assert(line->texture == NULL, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
   }
@@ -65,7 +70,7 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
 
 void _assert_line_integrity(State *state, char *file, int linenum) {
   my_assert(state->ex_frame.line->next == NULL, file, linenum);
-  assert_main_frame_integrity(&state->main_frame, file, linenum);
+  assert_editor_frame_integrity(&state->editor_frame, file, linenum);
 }
 #else
 #define assert_line_integrity(state) (void)state
@@ -93,7 +98,7 @@ CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
 
 void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
   SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
-  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(cursorColor)));
+  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(CURSOR_COLOR)));
   if (fill) {
     SDL_ccode(SDL_RenderFillRect(renderer, dest));
   } else {
@@ -102,7 +107,7 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
 }
 
 bool32 line_eq(Line *line, char *str) {
-  return strncmp(line->text, str, line->size) == 0;
+  return strlen(str) == line->size && strncmp(line->text, str, line->size) == 0;
 }
 
 void line_insert_next(Line *line, Line *next_line) {
@@ -118,19 +123,6 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-Glyph *render_char(State *state, SDL_Renderer *renderer, int ch, int x, int y) {
-  Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
-  assert(glyph != NULL);
-
-  SDL_Rect dest;
-  dest.x = x;
-  dest.y = y;
-  dest.w = glyph->w;
-  dest.h = glyph->h;
-  SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
-  return glyph;
-}
-
 void line_invalidate_texture(Line *line) {
   if (line->texture != NULL) {
     SDL_DestroyTexture(line->texture);
@@ -138,26 +130,9 @@ void line_invalidate_texture(Line *line) {
   }
 }
 
-void render_text(State *state, SDL_Renderer *renderer, const char *text,
-                 int len, int x, int y) {
-  for (int i = 0; i < len; ++i) {
-    char ch = text[i];
-    Glyph *glyph = state->glyph_cache + (ch - ASCII_LOW);
-    assert(glyph != NULL);
-
-    SDL_Rect dest;
-    dest.x = x;
-    dest.y = y;
-    dest.w = glyph->w;
-    dest.h = glyph->h;
-    SDL_ccode(SDL_RenderCopy(renderer, glyph->texture, NULL, &dest));
-    x += glyph->w;
-  }
-}
-
 void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
                   Line *end_line, Cursor cursor, int x_start, int y_start,
-                  bool32 is_cursor_active) {
+                  bool32 is_cursor_active, uint32 color) {
   const int cursor_w = state->font_h / 2;
 
   SDL_Rect dest;
@@ -165,14 +140,12 @@ void render_lines(State *state, SDL_Renderer *renderer, Line *start_line,
   dest.y = y_start;
   dest.h = state->font_h;
 
-  SDL_Color sdlFontColor = {UNHEX(fontColor)};
+  SDL_Color sdlFontColor = {UNHEX(color)};
   for (Line *line = start_line; line != end_line; line = line->next) {
     if (line == cursor.line) {
       uint16 cursor_x = dest.x;
       for (uint16 i = 0; i < cursor.column; ++i) {
-        Glyph *glyph = state->glyph_cache + (line->text[i] - ASCII_LOW);
-        assert(glyph != NULL);
-        cursor_x += glyph->w;
+        cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
       }
 
       SDL_Rect cursorDest;
@@ -223,7 +196,7 @@ void cursor_insert_text(Cursor *cursor, char *text, uint32 text_size) {
 }
 
 // TODO: reindex using the previous index
-void main_frame_reindex(MainFrame *frame) {
+void editor_frame_reindex(EditorFrame *frame) {
   uint32 i = 0;
   for (Line *line = frame->line; line != NULL; line = line->next) {
     frame->index[i] = line;
@@ -233,7 +206,50 @@ void main_frame_reindex(MainFrame *frame) {
   assert(i == frame->line_count);
 }
 
-void main_frame_clear(MainFrame *frame) {
+void editor_frame_cursor_reset(EditorFrame *frame, uint32 *column) {
+  frame->cursor.line_num = 0;
+  frame->cursor.line = frame->line;
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  }
+}
+
+void editor_frame_cursor_up(EditorFrame *frame, Line *line, uint32 *column) {
+  frame->cursor.line_num--;
+  frame->cursor.line = line;
+
+  if (frame->cursor.line_num < frame->viewport_start) {
+    frame->viewport_start--;
+  }
+
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  } else {
+    if (frame->cursor.column > frame->cursor.line->size) {
+      frame->cursor.column = frame->cursor.line->size;
+    }
+  }
+}
+
+void editor_frame_cursor_down(EditorFrame *frame, Line *line, uint32 *column) {
+  frame->cursor.line_num++;
+  frame->cursor.line = line;
+
+  if (frame->cursor.line_num >=
+      (frame->viewport_start + frame->viewport_length)) {
+    frame->viewport_start++;
+  }
+
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  } else {
+    if (frame->cursor.column > frame->cursor.line->size) {
+      frame->cursor.column = frame->cursor.line->size;
+    }
+  }
+}
+
+void editor_frame_clear(EditorFrame *frame) {
   for (Line *line = frame->line->next; line != NULL;) {
     line_invalidate_texture(line);
     Line *next_line = line->next;
@@ -245,15 +261,14 @@ void main_frame_clear(MainFrame *frame) {
     }
     line = next_line;
   }
-  frame->cursor.line_num = 0;
-  frame->cursor.line = frame->line;
+  uint32 new_column = 0;
+  editor_frame_cursor_reset(frame, &new_column);
   frame->cursor.line->next = NULL;
-  frame->cursor.column = 0;
   frame->line->size = 0;
   frame->line_count = 1;
 }
 
-void main_frame_remove_char(MainFrame *frame) {
+void editor_frame_remove_char(EditorFrame *frame) {
   if (frame->cursor.column == 0) {
     if (frame->cursor.line->prev != NULL) {
       Line *line_to_remove = frame->cursor.line;
@@ -284,7 +299,7 @@ void main_frame_remove_char(MainFrame *frame) {
       } else {
         line_insert_next(frame->deleted_line, line_to_remove);
       }
-      main_frame_reindex(frame);
+      editor_frame_reindex(frame);
     }
   } else {
     assert(frame->cursor.column <= frame->cursor.line->size);
@@ -298,7 +313,7 @@ void main_frame_remove_char(MainFrame *frame) {
   line_invalidate_texture(frame->cursor.line);
 }
 
-void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
+void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
@@ -321,20 +336,22 @@ void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
   }
 
   line_insert_next(frame->cursor.line, new_line);
-  frame->cursor.line = new_line;
-  frame->cursor.line_num++;
-  frame->cursor.column = 0;
+  static uint32 new_column = 0;
+  editor_frame_cursor_down(frame, new_line, &new_column);
   frame->line_count++;
-  main_frame_reindex(frame);
+  editor_frame_reindex(frame);
 }
 
 void ex_frame_remove_char(ExFrame *frame) {
-  assert(frame->cursor.column <= frame->cursor.line->size);
-  memcpy(frame->cursor.line->text + frame->cursor.column,
-         frame->cursor.line->text + frame->cursor.column + 1,
-         frame->cursor.line->size - frame->cursor.column);
-  frame->cursor.line->size--;
-  frame->cursor.column--;
+  if (frame->cursor.column > 0) {
+    assert(frame->cursor.column <= frame->cursor.line->size);
+    memcpy(frame->cursor.line->text + frame->cursor.column,
+           frame->cursor.line->text + frame->cursor.column + 1,
+           frame->cursor.line->size - frame->cursor.column);
+    frame->cursor.line->size--;
+    frame->cursor.column--;
+    line_invalidate_texture(frame->cursor.line);
+  }
 }
 
 #if DEBUG_PLAYBACK == PLAYBACK_RECORDING
@@ -363,32 +380,46 @@ int poll_event(Input *input, SDL_Event *event) {
 }
 #endif
 
-int load_file(State *state) {
-  FILE *f = fopen("src/htext_app.c", "r");
+int load_file(SDL_Renderer *renderer, State *state, char *filename) {
+  FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
   }
 
-  main_frame_clear(&state->main_frame);
+  editor_frame_clear(&state->editor_frame);
   assert_line_integrity(state);
-  assert(state->main_frame.line_count == 1);
+  assert(state->editor_frame.line_count == 1);
 
   char c;
   int read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      main_frame_insert_new_line(&state->arena, &state->main_frame);
+      editor_frame_insert_new_line(&state->arena, &state->editor_frame);
     } else {
       assert(c >= 32);
-      cursor_insert_text(&state->main_frame.cursor, &c, 1);
+      cursor_insert_text(&state->editor_frame.cursor, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
 
-  state->main_frame.cursor.line = state->main_frame.line;
-  state->main_frame.cursor.line_num = 0;
-  state->main_frame.cursor.column = 0;
-  main_frame_reindex(&state->main_frame);
+  state->editor_frame.cursor.line = state->editor_frame.line;
+  state->editor_frame.cursor.line_num = 0;
+  state->editor_frame.cursor.column = 0;
+  state->editor_frame.viewport_start = 0;
+  editor_frame_reindex(&state->editor_frame);
+  fclose(f);
+
+  // TODO: reuse string if already is reserved
+  state->filename = pushString(&state->arena, filename);
+
+  SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
+
+  if (state->filename_texture != NULL) {
+    SDL_DestroyTexture(state->filename_texture);
+  }
+  state->filename_texture =
+      texture_from_text(renderer, state->font, state->filename, color,
+                        &state->filename_texture_width);
   return 0;
 }
 
@@ -402,7 +433,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   SDL_RenderClear(buffer->debugRenderer);
 #endif
 
-  SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(backgroundColor)));
+  SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(BG_COLOR)));
   SDL_ccode(SDL_RenderClear(buffer->renderer));
 
   State *state = (State *)memory->permanentStorage;
@@ -418,14 +449,21 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     state->font_h = TTF_FontHeight(state->font);
 
-    SDL_Color sdlFontColor = {UNHEX(fontColor)};
+    SDL_Color sdlFontColor = {UNHEX(EDITOR_FONT_COLOR)};
     for (int i = ASCII_LOW; i < ASCII_HIGH; ++i) {
       SDL_Surface *surface =
           TTF_cpointer(TTF_RenderGlyph_Solid(state->font, i, sdlFontColor));
-      SDL_Texture *texture =
+      state->glyph_width[i - ASCII_LOW] = surface->w;
+      SDL_FreeSurface(surface);
+    }
+
+    {
+      SDL_Color color = {UNHEX(EX_FONT_COLOR)};
+      SDL_Surface *surface =
+          TTF_cpointer(TTF_RenderGlyph_Solid(state->font, ':', color));
+      state->ex_prefix_texture_width = surface->w;
+      state->ex_prefix_texture =
           SDL_cpointer(SDL_CreateTextureFromSurface(buffer->renderer, surface));
-      state->glyph_cache[i - ASCII_LOW] =
-          (Glyph){.texture = texture, .w = surface->w, .h = surface->h};
       SDL_FreeSurface(surface);
     }
 
@@ -434,10 +472,12 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     {
       Line *line = line_create(&state->arena);
-      state->main_frame =
-          (MainFrame){.line = line,
-                      .cursor = (Cursor){.line = line, .column = 0},
-                      .line_count = 1};
+      state->editor_frame =
+          (EditorFrame){.line = line,
+                        .cursor = (Cursor){.line = line, .column = 0},
+                        .line_count = 1,
+                        .viewport_start = 0};
+      editor_frame_reindex(&state->editor_frame);
     }
     {
       Line *line = line_create(&state->arena);
@@ -448,14 +488,16 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
 
     {
-      SDL_Color sdlModeColor = {UNHEX(modeColor)};
+      SDL_Color modeColor = {UNHEX(MODELINE_FONT_COLOR)};
       state->appModeTextures[AppMode_ex] = cached_texture_create(
-          buffer->renderer, state->font, "EX", sdlModeColor);
+          buffer->renderer, state->font, "EX | ", modeColor);
       state->appModeTextures[AppMode_normal] = cached_texture_create(
-          buffer->renderer, state->font, "NORMAL", sdlModeColor);
+          buffer->renderer, state->font, "NORMAL | ", modeColor);
       state->appModeTextures[AppMode_insert] = cached_texture_create(
-          buffer->renderer, state->font, "INSERT", sdlModeColor);
+          buffer->renderer, state->font, "INSERT | ", modeColor);
     }
+
+    state->filename = NULL;
 
     state->isInitialized = true;
   }
@@ -475,8 +517,18 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     printf("RELOAD\n");
   }
 
-  MainFrame *main_frame = &state->main_frame;
+  EditorFrame *editor_frame = &state->editor_frame;
   ExFrame *ex_frame = &state->ex_frame;
+
+  const int editor_frame_start_y = buffer->height * 0.01;
+  const int modeline_frame_start_y = buffer->height - state->font_h * 3;
+  const int ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
+  editor_frame->viewport_length =
+      (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
+
+  if (editor_frame->viewport_length > editor_frame->line_count) {
+    editor_frame->viewport_length = editor_frame->line_count;
+  }
 
   SDL_Event event;
   while (poll_event(input, &event)) {
@@ -492,10 +544,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           if (line_eq(ex_frame->line, "quit") || line_eq(ex_frame->line, "q")) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
-            load_file(state);
+            load_file(buffer->renderer, state, "src/htext_app.c");
             assert_line_integrity(state);
           } else if (line_eq(ex_frame->line, "clear")) {
-            main_frame_clear(main_frame);
+            editor_frame_clear(editor_frame);
             assert_line_integrity(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
@@ -509,10 +561,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          main_frame_insert_new_line(&state->arena, main_frame);
+          editor_frame_insert_new_line(&state->arena, editor_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          main_frame_remove_char(main_frame);
+          editor_frame_remove_char(editor_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
@@ -537,41 +589,35 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             state->mode = AppMode_insert;
           } break;
           case 'h': {
-            if (main_frame->cursor.column > 0) {
-              main_frame->cursor.column--;
+            if (editor_frame->cursor.column > 0) {
+              editor_frame->cursor.column--;
             }
           } break;
           case 'l': {
-            if (main_frame->cursor.column < main_frame->cursor.line->size) {
-              main_frame->cursor.column++;
+            if (editor_frame->cursor.column < editor_frame->cursor.line->size) {
+              editor_frame->cursor.column++;
             }
           } break;
           case 'k': {
-            if (main_frame->cursor.line->prev != NULL) {
-              main_frame->cursor.line = main_frame->cursor.line->prev;
-              main_frame->cursor.line_num--;
-              if (main_frame->cursor.column > main_frame->cursor.line->size) {
-                main_frame->cursor.column = main_frame->cursor.line->size;
-              }
+            if (editor_frame->cursor.line->prev != NULL) {
+              editor_frame_cursor_up(editor_frame,
+                                     editor_frame->cursor.line->prev, NULL);
             }
           } break;
           case 'j': {
-            if (main_frame->cursor.line->next != NULL) {
-              main_frame->cursor.line = main_frame->cursor.line->next;
-              main_frame->cursor.line_num++;
-              if (main_frame->cursor.column > main_frame->cursor.line->size) {
-                main_frame->cursor.column = main_frame->cursor.line->size;
-              }
+            if (editor_frame->cursor.line->next != NULL) {
+              editor_frame_cursor_down(editor_frame,
+                                       editor_frame->cursor.line->next, NULL);
             }
           } break;
           case 'H': {
-            main_frame->cursor.column = 0;
+            editor_frame->cursor.column = 0;
           } break;
           case 'L': {
-            main_frame->cursor.column = main_frame->cursor.line->size;
+            editor_frame->cursor.column = editor_frame->cursor.line->size;
           } break;
           case 'A': {
-            main_frame->cursor.column = main_frame->cursor.line->size;
+            editor_frame->cursor.column = editor_frame->cursor.line->size;
             state->mode = AppMode_insert;
           } break;
           }
@@ -583,7 +629,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_insert: {
         uint32 text_size = strlen(event.text.text);
-        cursor_insert_text(&main_frame->cursor, event.text.text, text_size);
+        cursor_insert_text(&editor_frame->cursor, event.text.text, text_size);
       } break;
       default:
         assert(false);
@@ -596,60 +642,62 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // -------- rendering
-  int main_frame_start_y = buffer->height * 0.01;
-  int ex_frame_start_y = buffer->height - state->font_h - 0.01 * buffer->height;
-
   // render main buffer
-
   {
-    int h = ex_frame_start_y - main_frame_start_y;
-    uint32 lines_to_render = h / state->font_h;
-    Line *start_line = main_frame->line;
+    Line *start_line = editor_frame->index[editor_frame->viewport_start];
     assert(start_line != NULL);
-    Line *end_line = NULL;
-
-    if (main_frame->line_count > lines_to_render) {
-      int start_line_num = main_frame->cursor.line_num - (lines_to_render / 2);
-      if (start_line_num < 0) {
-        start_line_num = 0;
-      }
-      uint32 end_line_num = start_line_num + lines_to_render;
-      if (end_line_num > main_frame->line_count) {
-        end_line_num = main_frame->line_count;
-      }
-      start_line = main_frame->index[start_line_num];
-      end_line = main_frame->index[end_line_num];
-      assert(start_line != NULL);
-    }
+    Line *end_line = editor_frame->index[editor_frame->viewport_start +
+                                         editor_frame->viewport_length];
 
     render_lines(state, buffer->renderer, start_line, end_line,
-                 main_frame->cursor, buffer->width * 0.01, main_frame_start_y,
-                 state->mode != AppMode_ex);
+                 editor_frame->cursor, buffer->width * 0.01,
+                 editor_frame_start_y, state->mode != AppMode_ex,
+                 EDITOR_FONT_COLOR);
   }
 
-  // render mode name
+  // render mode line
   {
     assert(state->mode < AppMode_count);
     CachedTexture *texture = state->appModeTextures + state->mode;
     SDL_Rect dest;
-    dest.x = buffer->width - buffer->width * 0.01 - texture->w;
-    dest.y = buffer->height - state->font_h - 0.03 * buffer->height;
-    dest.w = texture->w;
+    dest.y = modeline_frame_start_y;
     dest.h = state->font_h;
+    dest.x = 0;
+    dest.w = buffer->width;
+
+    SDL_ccode(
+        SDL_SetRenderDrawColor(buffer->renderer, UNHEX(MODELINE_BG_COLOR)));
+    SDL_ccode(SDL_RenderFillRect(buffer->renderer, &dest));
+
+    dest.x = buffer->width * 0.01;
+    dest.w = texture->w;
     SDL_ccode(SDL_RenderCopy(buffer->renderer, texture->texture, NULL, &dest));
+
+    dest.x += dest.w;
+
+    if (state->filename != NULL) {
+      dest.w = state->filename_texture_width;
+      SDL_RenderCopy(buffer->renderer, state->filename_texture, NULL, &dest);
+    }
   }
 
   if (state->mode == AppMode_ex) {
     assert(ex_frame->line->next == NULL);
 
-    int x = 0.01 * buffer->width;
+    int x = 0.005 * buffer->width;
 
-    // first render ':'
-    x += render_char(state, buffer->renderer, ':', x, ex_frame_start_y)->w;
+    SDL_Rect dest;
+    dest.x = x;
+    dest.y = ex_frame_start_y;
+    dest.h = state->font_h;
+    dest.w = state->ex_prefix_texture_width;
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, state->ex_prefix_texture, NULL,
+                             &dest));
+    dest.x += dest.w;
 
     render_lines(state, buffer->renderer, ex_frame->line, NULL,
-                 ex_frame->cursor, x, ex_frame_start_y,
-                 state->mode == AppMode_ex);
+                 ex_frame->cursor, dest.x, dest.y, state->mode == AppMode_ex,
+                 EX_FONT_COLOR);
   }
 
 #if DEBUG_WINDOW
@@ -666,7 +714,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.h = state->font_h;
 
     {
-      sprintf(text, "Cursor position: %d", main_frame->cursor.column);
+      sprintf(text, "Main frame cursor position: %d",
+              editor_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
@@ -675,9 +724,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     dest.y += state->font_h;
 
-    if (main_frame->line->size > 0) {
-      memcpy(text, main_frame->line->text, main_frame->line->size);
-      text[main_frame->line->size] = '\0';
+    if (editor_frame->line->size > 0) {
+      memcpy(text, editor_frame->line->text, editor_frame->line->size);
+      text[editor_frame->line->size] = '\0';
 
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
@@ -686,9 +735,18 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       dest.y += state->font_h;
     }
 
-    if (main_frame->line->size > 0) {
-      sprintf(text, "Line size: %d", main_frame->line->size);
+    if (editor_frame->line->size > 0) {
+      sprintf(text, "Line size: %d", editor_frame->line->size);
 
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
+    }
+
+    {
+      sprintf(text, "Ex frame cursor position: %d", ex_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
