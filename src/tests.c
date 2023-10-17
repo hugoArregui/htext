@@ -16,7 +16,7 @@ int main(void) {
   initializeArena(&arena, totalSize, gameMemoryBlock);
 
   Line *line = line_create(&arena);
-  MainFrame frame = (MainFrame){.line = line,
+  EditorFrame frame = (EditorFrame){.line = line,
                                 .cursor = (Cursor){.line = line, .column = 0},
                                 .line_count = 1};
 
@@ -36,14 +36,14 @@ int main(void) {
 
   //----
   frame.cursor.column = 6;
-  main_frame_remove_char(&frame);
+  editor_frame_remove_char(&frame);
   assert(line_eq(frame.line, "hello world"));
   assert(frame.cursor.column == 5);
   assert(frame.line->prev == NULL);
 
   //----
   frame.cursor.column = 6;
-  main_frame_insert_new_line(&arena, &frame);
+  editor_frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     "world" cursor.column = 0
@@ -60,7 +60,7 @@ int main(void) {
   assert(frame.deleted_line == NULL);
 
   //----
-  main_frame_insert_new_line(&arena, &frame);
+  editor_frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     ""
@@ -78,7 +78,7 @@ int main(void) {
   assert(frame.line->next->next->prev == frame.line->next);
 
   //----
-  main_frame_remove_char(&frame);
+  editor_frame_remove_char(&frame);
   /*
     "hello "
     "world" cursor.column = 0
@@ -98,7 +98,7 @@ int main(void) {
 
   //----
   frame.cursor.column = 5;
-  main_frame_insert_new_line(&arena, &frame);
+  editor_frame_insert_new_line(&arena, &frame);
   /*
     "hello "
     "world"
