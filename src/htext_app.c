@@ -26,9 +26,6 @@
 
 #define EX_FONT_COLOR 0xFFFFFF00
 
-// TODO viewport, and change when cursor hits the top or the bottom
-// TODO modeline with filename and mode
-
 #define ASSERT_LINE_INTEGRITY 1
 #if ASSERT_LINE_INTEGRITY
 #define assert_line_integrity(state)                                           \
@@ -221,6 +218,10 @@ void editor_frame_cursor_up(EditorFrame *frame, Line *line, uint32 *column) {
   frame->cursor.line_num--;
   frame->cursor.line = line;
 
+  if (frame->cursor.line_num < frame->viewport_start) {
+    frame->viewport_start--;
+  }
+
   if (column != NULL) {
     frame->cursor.column = *column;
   } else {
@@ -233,6 +234,12 @@ void editor_frame_cursor_up(EditorFrame *frame, Line *line, uint32 *column) {
 void editor_frame_cursor_down(EditorFrame *frame, Line *line, uint32 *column) {
   frame->cursor.line_num++;
   frame->cursor.line = line;
+
+  if (frame->cursor.line_num >=
+      (frame->viewport_start + frame->viewport_length)) {
+    frame->viewport_start++;
+  }
+
   if (column != NULL) {
     frame->cursor.column = *column;
   } else {
@@ -398,6 +405,7 @@ int load_file(SDL_Renderer *renderer, State *state, char *filename) {
   state->editor_frame.cursor.line = state->editor_frame.line;
   state->editor_frame.cursor.line_num = 0;
   state->editor_frame.cursor.column = 0;
+  state->editor_frame.viewport_start = 0;
   editor_frame_reindex(&state->editor_frame);
   fclose(f);
 
@@ -467,7 +475,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       state->editor_frame =
           (EditorFrame){.line = line,
                         .cursor = (Cursor){.line = line, .column = 0},
-                        .line_count = 1};
+                        .line_count = 1,
+                        .viewport_start = 0};
+      editor_frame_reindex(&state->editor_frame);
     }
     {
       Line *line = line_create(&state->arena);
@@ -509,6 +519,16 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   EditorFrame *editor_frame = &state->editor_frame;
   ExFrame *ex_frame = &state->ex_frame;
+
+  const int editor_frame_start_y = buffer->height * 0.01;
+  const int modeline_frame_start_y = buffer->height - state->font_h * 3;
+  const int ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
+  editor_frame->viewport_length =
+      (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
+
+  if (editor_frame->viewport_length > editor_frame->line_count) {
+    editor_frame->viewport_length = editor_frame->line_count;
+  }
 
   SDL_Event event;
   while (poll_event(input, &event)) {
@@ -622,32 +642,12 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // -------- rendering
-  int editor_frame_start_y = buffer->height * 0.01;
-  int modeline_frame_start_y = buffer->height - state->font_h * 3;
-  int ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
-
   // render main buffer
   {
-    int h = modeline_frame_start_y - editor_frame_start_y;
-    uint32 lines_to_render = h / state->font_h;
-    Line *start_line = editor_frame->line;
+    Line *start_line = editor_frame->index[editor_frame->viewport_start];
     assert(start_line != NULL);
-    Line *end_line = NULL;
-
-    if (editor_frame->line_count > lines_to_render) {
-      int start_line_num =
-          editor_frame->cursor.line_num - (lines_to_render / 2);
-      if (start_line_num < 0) {
-        start_line_num = 0;
-      }
-      uint32 end_line_num = start_line_num + lines_to_render;
-      if (end_line_num > editor_frame->line_count) {
-        end_line_num = editor_frame->line_count;
-      }
-      start_line = editor_frame->index[start_line_num];
-      end_line = editor_frame->index[end_line_num];
-      assert(start_line != NULL);
-    }
+    Line *end_line = editor_frame->index[editor_frame->viewport_start +
+                                         editor_frame->viewport_length];
 
     render_lines(state, buffer->renderer, start_line, end_line,
                  editor_frame->cursor, buffer->width * 0.01,
