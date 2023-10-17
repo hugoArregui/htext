@@ -109,7 +109,7 @@ void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool32 fill) {
 }
 
 bool32 line_eq(Line *line, char *str) {
-  return strncmp(line->text, str, line->size) == 0;
+  return strlen(str) == line->size && strncmp(line->text, str, line->size) == 0;
 }
 
 void line_insert_next(Line *line, Line *next_line) {
@@ -341,7 +341,7 @@ int poll_event(Input *input, SDL_Event *event) {
 }
 #endif
 
-int load_file(State *state, char *filename) {
+int load_file(SDL_Renderer *renderer, State *state, char *filename) {
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
@@ -368,7 +368,18 @@ int load_file(State *state, char *filename) {
   state->main_frame.cursor.column = 0;
   main_frame_reindex(&state->main_frame);
   fclose(f);
+
+  // TODO: reuse string if already is reserved
   state->filename = pushString(&state->arena, filename);
+
+  SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
+
+  if (state->filename_texture != NULL) {
+    SDL_DestroyTexture(state->filename_texture);
+  }
+  state->filename_texture =
+      texture_from_text(renderer, state->font, state->filename, color,
+                        &state->filename_texture_width);
   return 0;
 }
 
@@ -481,7 +492,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           if (line_eq(ex_frame->line, "quit") || line_eq(ex_frame->line, "q")) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
-            load_file(state, "src/htext_app.c");
+            load_file(buffer->renderer, state, "src/htext_app.c");
             assert_line_integrity(state);
           } else if (line_eq(ex_frame->line, "clear")) {
             main_frame_clear(main_frame);
@@ -637,12 +648,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.x += dest.w;
 
     if (state->filename != NULL) {
-      // TODO: this could be cached
-      SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
-      SDL_Texture *filename_texture = texture_from_text(
-          buffer->renderer, state->font, state->filename, color, &dest.w);
-      SDL_RenderCopy(buffer->renderer, filename_texture, NULL, &dest);
-      SDL_DestroyTexture(filename_texture);
+      dest.w = state->filename_texture_width;
+      SDL_RenderCopy(buffer->renderer, state->filename_texture, NULL, &dest);
     }
   }
 
