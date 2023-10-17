@@ -141,6 +141,8 @@ typedef struct {
 
   Cursor cursor;
 
+  uint32 viewport_start;
+
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line* deleted_line;
 } EditorFrame;

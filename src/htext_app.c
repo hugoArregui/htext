@@ -209,6 +209,39 @@ void editor_frame_reindex(EditorFrame *frame) {
   assert(i == frame->line_count);
 }
 
+void editor_frame_cursor_reset(EditorFrame *frame, uint32 *column) {
+  frame->cursor.line_num = 0;
+  frame->cursor.line = frame->line;
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  }
+}
+
+void editor_frame_cursor_up(EditorFrame *frame, Line *line, uint32 *column) {
+  frame->cursor.line_num--;
+  frame->cursor.line = line;
+
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  } else {
+    if (frame->cursor.column > frame->cursor.line->size) {
+      frame->cursor.column = frame->cursor.line->size;
+    }
+  }
+}
+
+void editor_frame_cursor_down(EditorFrame *frame, Line *line, uint32 *column) {
+  frame->cursor.line_num++;
+  frame->cursor.line = line;
+  if (column != NULL) {
+    frame->cursor.column = *column;
+  } else {
+    if (frame->cursor.column > frame->cursor.line->size) {
+      frame->cursor.column = frame->cursor.line->size;
+    }
+  }
+}
+
 void editor_frame_clear(EditorFrame *frame) {
   for (Line *line = frame->line->next; line != NULL;) {
     line_invalidate_texture(line);
@@ -221,10 +254,9 @@ void editor_frame_clear(EditorFrame *frame) {
     }
     line = next_line;
   }
-  frame->cursor.line_num = 0;
-  frame->cursor.line = frame->line;
+  uint32 new_column = 0;
+  editor_frame_cursor_reset(frame, &new_column);
   frame->cursor.line->next = NULL;
-  frame->cursor.column = 0;
   frame->line->size = 0;
   frame->line_count = 1;
 }
@@ -297,9 +329,8 @@ void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   }
 
   line_insert_next(frame->cursor.line, new_line);
-  frame->cursor.line = new_line;
-  frame->cursor.line_num++;
-  frame->cursor.column = 0;
+  static uint32 new_column = 0;
+  editor_frame_cursor_down(frame, new_line, &new_column);
   frame->line_count++;
   editor_frame_reindex(frame);
 }
@@ -549,22 +580,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           } break;
           case 'k': {
             if (editor_frame->cursor.line->prev != NULL) {
-              editor_frame->cursor.line = editor_frame->cursor.line->prev;
-              editor_frame->cursor.line_num--;
-              if (editor_frame->cursor.column >
-                  editor_frame->cursor.line->size) {
-                editor_frame->cursor.column = editor_frame->cursor.line->size;
-              }
+              editor_frame_cursor_up(editor_frame,
+                                     editor_frame->cursor.line->prev, NULL);
             }
           } break;
           case 'j': {
             if (editor_frame->cursor.line->next != NULL) {
-              editor_frame->cursor.line = editor_frame->cursor.line->next;
-              editor_frame->cursor.line_num++;
-              if (editor_frame->cursor.column >
-                  editor_frame->cursor.line->size) {
-                editor_frame->cursor.column = editor_frame->cursor.line->size;
-              }
+              editor_frame_cursor_down(editor_frame,
+                                       editor_frame->cursor.line->next, NULL);
             }
           } break;
           case 'H': {
