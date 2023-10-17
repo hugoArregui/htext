@@ -143,7 +143,7 @@ typedef struct {
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line* deleted_line;
-} MainFrame;
+} EditorFrame;
 
 typedef struct {
   Line* line;
@@ -159,7 +159,7 @@ typedef struct {
 
   MemoryArena arena;
 
-  MainFrame main_frame;
+  EditorFrame editor_frame;
   ExFrame ex_frame;
 
   TTF_Font *font;

@@ -40,19 +40,19 @@
     assert(cond);                                                              \
   }
 
-void assert_main_frame_integrity(MainFrame *main_frame, char *file,
-                                 int linenum) {
+void assert_editor_frame_integrity(EditorFrame *editor_frame, char *file,
+                                   int linenum) {
   Line *prev_line = NULL;
 
   uint32 line_num = 0;
-  for (Line *line = main_frame->line; line != NULL; line = line->next) {
+  for (Line *line = editor_frame->line; line != NULL; line = line->next) {
     my_assert(line->prev != line, file, linenum);
     my_assert(line->next != line, file, linenum);
     my_assert(line->prev == prev_line, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
 
-    if (line == main_frame->cursor.line) {
-      my_assert(line_num == main_frame->cursor.line_num, file, linenum)
+    if (line == editor_frame->cursor.line) {
+      my_assert(line_num == editor_frame->cursor.line_num, file, linenum)
     }
 
     for (uint32 i = 0; i < line->size; ++i) {
@@ -62,9 +62,10 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
     line_num++;
   }
 
-  assert(line_num == main_frame->line_count);
+  assert(line_num == editor_frame->line_count);
 
-  for (Line *line = main_frame->deleted_line; line != NULL; line = line->next) {
+  for (Line *line = editor_frame->deleted_line; line != NULL;
+       line = line->next) {
     my_assert(line->texture == NULL, file, linenum);
     my_assert(line->max_size > 0, file, linenum);
   }
@@ -72,7 +73,7 @@ void assert_main_frame_integrity(MainFrame *main_frame, char *file,
 
 void _assert_line_integrity(State *state, char *file, int linenum) {
   my_assert(state->ex_frame.line->next == NULL, file, linenum);
-  assert_main_frame_integrity(&state->main_frame, file, linenum);
+  assert_editor_frame_integrity(&state->editor_frame, file, linenum);
 }
 #else
 #define assert_line_integrity(state) (void)state
@@ -198,7 +199,7 @@ void cursor_insert_text(Cursor *cursor, char *text, uint32 text_size) {
 }
 
 // TODO: reindex using the previous index
-void main_frame_reindex(MainFrame *frame) {
+void editor_frame_reindex(EditorFrame *frame) {
   uint32 i = 0;
   for (Line *line = frame->line; line != NULL; line = line->next) {
     frame->index[i] = line;
@@ -208,7 +209,7 @@ void main_frame_reindex(MainFrame *frame) {
   assert(i == frame->line_count);
 }
 
-void main_frame_clear(MainFrame *frame) {
+void editor_frame_clear(EditorFrame *frame) {
   for (Line *line = frame->line->next; line != NULL;) {
     line_invalidate_texture(line);
     Line *next_line = line->next;
@@ -228,7 +229,7 @@ void main_frame_clear(MainFrame *frame) {
   frame->line_count = 1;
 }
 
-void main_frame_remove_char(MainFrame *frame) {
+void editor_frame_remove_char(EditorFrame *frame) {
   if (frame->cursor.column == 0) {
     if (frame->cursor.line->prev != NULL) {
       Line *line_to_remove = frame->cursor.line;
@@ -259,7 +260,7 @@ void main_frame_remove_char(MainFrame *frame) {
       } else {
         line_insert_next(frame->deleted_line, line_to_remove);
       }
-      main_frame_reindex(frame);
+      editor_frame_reindex(frame);
     }
   } else {
     assert(frame->cursor.column <= frame->cursor.line->size);
@@ -273,7 +274,7 @@ void main_frame_remove_char(MainFrame *frame) {
   line_invalidate_texture(frame->cursor.line);
 }
 
-void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
+void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
@@ -300,7 +301,7 @@ void main_frame_insert_new_line(MemoryArena *arena, MainFrame *frame) {
   frame->cursor.line_num++;
   frame->cursor.column = 0;
   frame->line_count++;
-  main_frame_reindex(frame);
+  editor_frame_reindex(frame);
 }
 
 void ex_frame_remove_char(ExFrame *frame) {
@@ -347,26 +348,26 @@ int load_file(SDL_Renderer *renderer, State *state, char *filename) {
     return -1;
   }
 
-  main_frame_clear(&state->main_frame);
+  editor_frame_clear(&state->editor_frame);
   assert_line_integrity(state);
-  assert(state->main_frame.line_count == 1);
+  assert(state->editor_frame.line_count == 1);
 
   char c;
   int read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      main_frame_insert_new_line(&state->arena, &state->main_frame);
+      editor_frame_insert_new_line(&state->arena, &state->editor_frame);
     } else {
       assert(c >= 32);
-      cursor_insert_text(&state->main_frame.cursor, &c, 1);
+      cursor_insert_text(&state->editor_frame.cursor, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
 
-  state->main_frame.cursor.line = state->main_frame.line;
-  state->main_frame.cursor.line_num = 0;
-  state->main_frame.cursor.column = 0;
-  main_frame_reindex(&state->main_frame);
+  state->editor_frame.cursor.line = state->editor_frame.line;
+  state->editor_frame.cursor.line_num = 0;
+  state->editor_frame.cursor.column = 0;
+  editor_frame_reindex(&state->editor_frame);
   fclose(f);
 
   // TODO: reuse string if already is reserved
@@ -432,10 +433,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     {
       Line *line = line_create(&state->arena);
-      state->main_frame =
-          (MainFrame){.line = line,
-                      .cursor = (Cursor){.line = line, .column = 0},
-                      .line_count = 1};
+      state->editor_frame =
+          (EditorFrame){.line = line,
+                        .cursor = (Cursor){.line = line, .column = 0},
+                        .line_count = 1};
     }
     {
       Line *line = line_create(&state->arena);
@@ -475,7 +476,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     printf("RELOAD\n");
   }
 
-  MainFrame *main_frame = &state->main_frame;
+  EditorFrame *editor_frame = &state->editor_frame;
   ExFrame *ex_frame = &state->ex_frame;
 
   SDL_Event event;
@@ -495,7 +496,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             load_file(buffer->renderer, state, "src/htext_app.c");
             assert_line_integrity(state);
           } else if (line_eq(ex_frame->line, "clear")) {
-            main_frame_clear(main_frame);
+            editor_frame_clear(editor_frame);
             assert_line_integrity(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
@@ -509,10 +510,10 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          main_frame_insert_new_line(&state->arena, main_frame);
+          editor_frame_insert_new_line(&state->arena, editor_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
-          main_frame_remove_char(main_frame);
+          editor_frame_remove_char(editor_frame);
           assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
@@ -537,41 +538,43 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             state->mode = AppMode_insert;
           } break;
           case 'h': {
-            if (main_frame->cursor.column > 0) {
-              main_frame->cursor.column--;
+            if (editor_frame->cursor.column > 0) {
+              editor_frame->cursor.column--;
             }
           } break;
           case 'l': {
-            if (main_frame->cursor.column < main_frame->cursor.line->size) {
-              main_frame->cursor.column++;
+            if (editor_frame->cursor.column < editor_frame->cursor.line->size) {
+              editor_frame->cursor.column++;
             }
           } break;
           case 'k': {
-            if (main_frame->cursor.line->prev != NULL) {
-              main_frame->cursor.line = main_frame->cursor.line->prev;
-              main_frame->cursor.line_num--;
-              if (main_frame->cursor.column > main_frame->cursor.line->size) {
-                main_frame->cursor.column = main_frame->cursor.line->size;
+            if (editor_frame->cursor.line->prev != NULL) {
+              editor_frame->cursor.line = editor_frame->cursor.line->prev;
+              editor_frame->cursor.line_num--;
+              if (editor_frame->cursor.column >
+                  editor_frame->cursor.line->size) {
+                editor_frame->cursor.column = editor_frame->cursor.line->size;
               }
             }
           } break;
           case 'j': {
-            if (main_frame->cursor.line->next != NULL) {
-              main_frame->cursor.line = main_frame->cursor.line->next;
-              main_frame->cursor.line_num++;
-              if (main_frame->cursor.column > main_frame->cursor.line->size) {
-                main_frame->cursor.column = main_frame->cursor.line->size;
+            if (editor_frame->cursor.line->next != NULL) {
+              editor_frame->cursor.line = editor_frame->cursor.line->next;
+              editor_frame->cursor.line_num++;
+              if (editor_frame->cursor.column >
+                  editor_frame->cursor.line->size) {
+                editor_frame->cursor.column = editor_frame->cursor.line->size;
               }
             }
           } break;
           case 'H': {
-            main_frame->cursor.column = 0;
+            editor_frame->cursor.column = 0;
           } break;
           case 'L': {
-            main_frame->cursor.column = main_frame->cursor.line->size;
+            editor_frame->cursor.column = editor_frame->cursor.line->size;
           } break;
           case 'A': {
-            main_frame->cursor.column = main_frame->cursor.line->size;
+            editor_frame->cursor.column = editor_frame->cursor.line->size;
             state->mode = AppMode_insert;
           } break;
           }
@@ -583,7 +586,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_insert: {
         uint32 text_size = strlen(event.text.text);
-        cursor_insert_text(&main_frame->cursor, event.text.text, text_size);
+        cursor_insert_text(&editor_frame->cursor, event.text.text, text_size);
       } break;
       default:
         assert(false);
@@ -596,35 +599,37 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // -------- rendering
-  int main_frame_start_y = buffer->height * 0.01;
+  int editor_frame_start_y = buffer->height * 0.01;
   int modeline_frame_start_y = buffer->height - state->font_h * 3;
   int ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
 
   // render main buffer
   {
-    int h = modeline_frame_start_y - main_frame_start_y;
+    int h = modeline_frame_start_y - editor_frame_start_y;
     uint32 lines_to_render = h / state->font_h;
-    Line *start_line = main_frame->line;
+    Line *start_line = editor_frame->line;
     assert(start_line != NULL);
     Line *end_line = NULL;
 
-    if (main_frame->line_count > lines_to_render) {
-      int start_line_num = main_frame->cursor.line_num - (lines_to_render / 2);
+    if (editor_frame->line_count > lines_to_render) {
+      int start_line_num =
+          editor_frame->cursor.line_num - (lines_to_render / 2);
       if (start_line_num < 0) {
         start_line_num = 0;
       }
       uint32 end_line_num = start_line_num + lines_to_render;
-      if (end_line_num > main_frame->line_count) {
-        end_line_num = main_frame->line_count;
+      if (end_line_num > editor_frame->line_count) {
+        end_line_num = editor_frame->line_count;
       }
-      start_line = main_frame->index[start_line_num];
-      end_line = main_frame->index[end_line_num];
+      start_line = editor_frame->index[start_line_num];
+      end_line = editor_frame->index[end_line_num];
       assert(start_line != NULL);
     }
 
     render_lines(state, buffer->renderer, start_line, end_line,
-                 main_frame->cursor, buffer->width * 0.01, main_frame_start_y,
-                 state->mode != AppMode_ex, EDITOR_FONT_COLOR);
+                 editor_frame->cursor, buffer->width * 0.01,
+                 editor_frame_start_y, state->mode != AppMode_ex,
+                 EDITOR_FONT_COLOR);
   }
 
   // render mode line
@@ -687,7 +692,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     {
       sprintf(text, "Main frame cursor position: %d",
-              main_frame->cursor.column);
+              editor_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
@@ -696,9 +701,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     dest.y += state->font_h;
 
-    if (main_frame->line->size > 0) {
-      memcpy(text, main_frame->line->text, main_frame->line->size);
-      text[main_frame->line->size] = '\0';
+    if (editor_frame->line->size > 0) {
+      memcpy(text, editor_frame->line->text, editor_frame->line->size);
+      text[editor_frame->line->size] = '\0';
 
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
@@ -707,8 +712,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       dest.y += state->font_h;
     }
 
-    if (main_frame->line->size > 0) {
-      sprintf(text, "Line size: %d", main_frame->line->size);
+    if (editor_frame->line->size > 0) {
+      sprintf(text, "Line size: %d", editor_frame->line->size);
 
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
