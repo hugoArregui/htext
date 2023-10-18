@@ -211,8 +211,8 @@ void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
   int16_t line_num = frame->cursor.line_num + d;
   if (line_num < 0) {
     line_num = 0;
-  } else if (frame->cursor.line_num > frame->line_count) {
-    line_num = frame->line_count;
+  } else if (line_num > frame->line_count) {
+    line_num = frame->line_count - 1;
   }
 
   frame->cursor.line_num = line_num;
@@ -227,7 +227,7 @@ void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
 
   if (frame->viewport_start < 0) {
     frame->viewport_start = 0;
-  } else if (frame->viewport_start > frame->line_count) {
+  } else if (frame->viewport_start >= frame->line_count) {
     frame->viewport_start = frame->line_count - 1;
   }
 
@@ -414,11 +414,9 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
     } break;
     case 'k': {
       editor_frame_move_cursor(editor_frame, -1 * (ksm->repetitions), NULL);
-      break;
+    } break;
     case 'j': {
-      if (editor_frame->cursor.line->next != NULL) {
         editor_frame_move_cursor(editor_frame, ksm->repetitions, NULL);
-      }
     } break;
     case 'H': {
       editor_frame->cursor.column = 0;
@@ -433,14 +431,13 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
     case 'G': {
       editor_frame_move_cursor(
           editor_frame,
-          (editor_frame->line_count - editor_frame->cursor.line_num),
+          (editor_frame->line_count - editor_frame->cursor.line_num -1),
           &editor_frame->cursor.column);
     } break;
     case 'd':
     case 'g': {
       return KeyStateMachine_Operator;
     } break;
-    }
     }
   } else if (operator[0] == 'd' && operator[1] == 'd') {
     key_state_machine_reset(ksm);
