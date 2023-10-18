@@ -198,7 +198,7 @@ typedef struct {
   CachedTexture appModeTextures[AppMode_count];
 
   int16_t line_number_texture_width;
-  SDL_Texture* line_number_texture_cache[LINE_NUMBER_TEXTURE_CACHE_SIZE];
+  SDL_Texture *line_number_texture_cache[LINE_NUMBER_TEXTURE_CACHE_SIZE];
 
   char *filename;
   SDL_Texture *filename_texture;

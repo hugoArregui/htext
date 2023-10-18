@@ -5,11 +5,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <float.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <stdbool.h>
 
 typedef size_t memory_index;
 
