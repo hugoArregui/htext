@@ -1,4 +1,4 @@
-#ifndef __H_TEXT_H_TEXT
+#ifndef __H_TEXT_APP
 
 #include "htext_platform.h"
 #include <SDL2/SDL_render.h>
@@ -210,5 +210,5 @@ typedef struct {
   KeyStateMachine normal_ksm;
 } State;
 
-#define __H_TEXT_H_TEXT
+#define __H_TEXT_APP
 #endif
