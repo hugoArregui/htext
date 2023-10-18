@@ -18,7 +18,7 @@ build: clean
 
 test: clean
 	mkdir -p build/
-	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c src/htext_sdl.c $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c $(LIBS)
 	./build/tests
 
 format:
