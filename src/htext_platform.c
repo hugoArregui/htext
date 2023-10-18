@@ -57,8 +57,8 @@ void unloadGameCode(Code *code) {
 int main(void) {
   const char *libSourcePath = "build/htext.so";
 
-  uint64 permanentStorageSize = Megabytes(256);
-  uint64 transientStorageSize = Gigabytes(3);
+  uint64_t permanentStorageSize = Megabytes(256);
+  uint64_t transientStorageSize = Gigabytes(3);
   PlatformState platformState = {};
   platformState.totalSize = permanentStorageSize + transientStorageSize;
 
@@ -78,7 +78,7 @@ int main(void) {
   memory.transientStorageSize = transientStorageSize;
   memory.permanentStorage = platformState.gameMemoryBlock;
   memory.transientStorage =
-      ((uint8 *)memory.permanentStorage + memory.permanentStorageSize);
+      ((uint8_t *)memory.permanentStorage + memory.permanentStorageSize);
 
   int width = 1920;
   int height = 1080;
@@ -135,12 +135,12 @@ int main(void) {
     return -1;
   }
 
-  uint32 targetFrameDurationMs = targetSecondsPerFrame * 1000;
+  uint32_t targetFrameDurationMs = targetSecondsPerFrame * 1000;
   int running = 1;
 
   SDL_StartTextInput();
   while (running) {
-    uint32 frameStartMs = SDL_GetTicks();
+    uint32_t frameStartMs = SDL_GetTicks();
 
 #if DEBUG
     time_t modificationTime;
@@ -182,10 +182,10 @@ int main(void) {
 #endif
     }
 
-    uint32 frameDurationMs = SDL_GetTicks() - frameStartMs;
+    uint32_t frameDurationMs = SDL_GetTicks() - frameStartMs;
 
     if (frameDurationMs < targetFrameDurationMs) {
-      uint32 sleepMs = targetFrameDurationMs - frameDurationMs;
+      uint32_t sleepMs = targetFrameDurationMs - frameDurationMs;
       if (sleepMs > 0) {
         SDL_Delay(sleepMs);
       }

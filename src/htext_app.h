@@ -6,12 +6,14 @@
 #include <stdlib.h>
 
 #define INDEX_SIZE 5000
+#define KEY_PREFIX_MAX_SIZE 20
+#define LINE_NUMBER_TEXTURE_CACHE_SIZE 5000
 
 typedef struct {
   memory_index size;
-  uint8 *base;
+  uint8_t *base;
   memory_index used;
-  int32 tempCount;
+  int32_t tempCount;
 } MemoryArena;
 
 typedef struct {
@@ -20,13 +22,13 @@ typedef struct {
 } TemporaryMemory;
 
 typedef struct {
-  bool32 isInitialized;
+  bool isInitialized;
   MemoryArena arena;
 } TransientState;
 
 static void initializeArena(MemoryArena *arena, memory_index size, void *base) {
   arena->size = size;
-  arena->base = (uint8 *)base;
+  arena->base = (uint8_t *)base;
   arena->used = 0;
   arena->tempCount = 0;
 }
@@ -70,9 +72,9 @@ void *pushSize(MemoryArena *arena, size_t size, size_t alignment) {
 }
 
 char *pushString(MemoryArena *arena, char *source) {
-  uint32 size = strlen(source) + 1;
+  uint32_t size = strlen(source) + 1;
   char *dest = (char *)pushSize(arena, size, DEFAULT_ALIGMENT);
-  for (uint32 charIndex = 0; charIndex < size; ++charIndex) {
+  for (uint32_t charIndex = 0; charIndex < size; ++charIndex) {
     dest[charIndex] = source[charIndex];
   }
   return dest;
@@ -111,39 +113,39 @@ enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count };
 
 typedef struct {
   SDL_Texture *texture;
-  int32 w;
+  int16_t w;
 } CachedTexture;
 
 struct Line;
 
 typedef struct Line {
   char *text;
-  uint32 max_size;
-  uint32 size;
+  int16_t max_size;
+  int16_t size;
   struct Line *prev;
   struct Line *next;
 
   SDL_Texture *texture;
-  int32 texture_width;
+  int16_t texture_width;
 } Line;
 
 typedef struct {
   Line *line;
-  uint32 line_num;
-  uint32 column;
+  int16_t line_num;
+  int16_t column;
 } Cursor;
 
 typedef struct {
   Line *line;
-  uint32 line_count;
+  int16_t line_count;
   // NOTE: currently I use this only to optimize the rendering window, so it
   // could be much smaller, some cursor_line +/- amount_of_lines_to_render
   Line *index[INDEX_SIZE];
 
   Cursor cursor;
 
-  uint32 viewport_start;
-  uint32 viewport_length;
+  int16_t viewport_start;
+  int16_t viewport_length;
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line *deleted_line;
@@ -151,11 +153,34 @@ typedef struct {
 
 typedef struct {
   Line *line;
-  Cursor cursor;
+  int16_t cursor_column;
 } ExFrame;
 
 #define ASCII_LOW 32
 #define ASCII_HIGH 126
+
+enum KeyStateMachineState {
+  KeyStateMachine_Repetitions,
+  KeyStateMachine_Operator,
+  KeyStateMachine_Done,
+};
+
+struct KeyStateMachine;
+
+typedef struct {
+  SDL_Texture *texture;
+  int16_t texture_width;
+
+  enum KeyStateMachineState state;
+
+  char keys[100];
+  int8_t keys_size;
+
+  int16_t repetitions;
+
+  char operator[2];
+  int8_t operator_size;
+} KeyStateMachine;
 
 typedef struct {
   int isInitialized;
@@ -168,16 +193,21 @@ typedef struct {
 
   TTF_Font *font;
   int glyph_width[ASCII_HIGH - ASCII_LOW];
-  int32 font_h;
+  int16_t font_h;
 
   CachedTexture appModeTextures[AppMode_count];
 
+  int16_t line_number_texture_width;
+  SDL_Texture* line_number_texture_cache[LINE_NUMBER_TEXTURE_CACHE_SIZE];
+
   char *filename;
   SDL_Texture *filename_texture;
-  int filename_texture_width;
+  int16_t filename_texture_width;
 
   SDL_Texture *ex_prefix_texture;
-  int ex_prefix_texture_width;
+  int16_t ex_prefix_texture_width;
+
+  KeyStateMachine normal_ksm;
 } State;
 
 #define __H_TEXT_H_TEXT
