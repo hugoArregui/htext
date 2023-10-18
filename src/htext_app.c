@@ -17,7 +17,6 @@
 #define EX_FONT_COLOR 0xFFFFFF00
 
 // TODO rewrite load_file  to avoid moving the cursor and such
-// TODO gg and G
 // TODO dd is not finished
 
 #define ASSERT_LINE_INTEGRITY 1
