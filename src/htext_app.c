@@ -72,7 +72,7 @@ void _assert_line_integrity(State *state, char *file, int16_t linenum) {
 #endif
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
-                               char *text, SDL_Color color, int16_t *w) {
+                               char *text, SDL_Color color, int32_t *w) {
 
   SDL_Surface *surface = TTF_cpointer(TTF_RenderText_Solid(font, text, color));
   if (w != NULL) {
@@ -627,8 +627,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   assert(sizeof(State) <= memory->permanentStorageSize);
 
 #if DEBUG_WINDOW
-  uint32 debugBackgroundColor = 0xFFFFFFFF;
-  uint32 debugFontColor = 0x00000000;
+  uint32_t debugBackgroundColor = 0xFFFFFFFF;
+  uint32_t debugFontColor = 0x00000000;
   SDL_SetRenderDrawColor(buffer->debugRenderer, UNHEX(debugBackgroundColor));
   SDL_RenderClear(buffer->debugRenderer);
 #endif
@@ -874,7 +874,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.h = state->font_h;
 
     {
-      sprintf(text, "Main frame cursor position: %d",
+      sprintf(text, "Editor frame cursor column: %d",
               editor_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
@@ -884,29 +884,19 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     dest.y += state->font_h;
 
-    if (editor_frame->line->size > 0) {
-      memcpy(text, editor_frame->line->text, editor_frame->line->size);
-      text[editor_frame->line->size] = '\0';
-
+    {
+      sprintf(text, "Editor frame cursor line number: %d",
+              editor_frame->cursor.line_num);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
-      dest.y += state->font_h;
     }
 
-    if (editor_frame->line->size > 0) {
-      sprintf(text, "Line size: %d", editor_frame->line->size);
-
-      SDL_Texture *texture = texture_from_text(
-          buffer->debugRenderer, state->font, text, color, &dest.w);
-      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
-      SDL_DestroyTexture(texture);
-      dest.y += state->font_h;
-    }
+    dest.y += state->font_h;
 
     {
-      sprintf(text, "Ex frame cursor position: %d", ex_frame->cursor.column);
+      sprintf(text, "Ex frame cursor column: %d", ex_frame->cursor_column);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);

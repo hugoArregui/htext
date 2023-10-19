@@ -113,7 +113,7 @@ enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count };
 
 typedef struct {
   SDL_Texture *texture;
-  int16_t w;
+  int32_t w;
 } CachedTexture;
 
 struct Line;
@@ -126,7 +126,7 @@ typedef struct Line {
   struct Line *next;
 
   SDL_Texture *texture;
-  int16_t texture_width;
+  int32_t texture_width;
 } Line;
 
 typedef struct {
@@ -169,7 +169,7 @@ struct KeyStateMachine;
 
 typedef struct {
   SDL_Texture *texture;
-  int16_t texture_width;
+  int32_t texture_width;
 
   enum KeyStateMachineState state;
 
@@ -197,12 +197,12 @@ typedef struct {
 
   CachedTexture appModeTextures[AppMode_count];
 
-  int16_t line_number_texture_width;
+  int32_t line_number_texture_width;
   SDL_Texture *line_number_texture_cache[LINE_NUMBER_TEXTURE_CACHE_SIZE];
 
   char *filename;
   SDL_Texture *filename_texture;
-  int16_t filename_texture_width;
+  int32_t filename_texture_width;
 
   SDL_Texture *ex_prefix_texture;
   int16_t ex_prefix_texture_width;
