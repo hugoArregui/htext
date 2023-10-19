@@ -102,6 +102,11 @@ bool line_eq(Line *line, char *str) {
          strncmp(line->text, str, line->size) == 0;
 }
 
+bool line_starts_with(Line *line, char *str) {
+  int16_t len = strlen(str);
+  return line->size >= len && strncmp(line->text, str, len) == 0;
+}
+
 void line_insert_next(Line *line, Line *next_line) {
   assert(line != NULL);
   assert(next_line != NULL);
@@ -718,13 +723,18 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             if (load_file(buffer->renderer, state, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
-          } else if (line_eq(ex_frame->line, "dump")) {
-            char *filename = "dump.0";
-            if (dump_file(state, "dump.0") != 0) {
+          } else if (line_starts_with(ex_frame->line, "dump ")) {
+            char *filename = ex_frame->line->text + 5;
+            if (dump_file(state, filename) == 0) {
+              sprintf(state->status_message, "Wrote to %s", filename);
+            } else {
               sprintf(state->status_message, "Cannot write to %s", filename);
             }
           } else if (line_eq(ex_frame->line, "clear")) {
             editor_frame_clear(editor_frame);
+          } else if (strlen(ex_frame->line->text) > 0) {
+            sprintf(state->status_message, "Unrecognized command: %s",
+                    ex_frame->line->text);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           ex_frame_remove_char(ex_frame);
