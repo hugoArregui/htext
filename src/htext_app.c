@@ -19,10 +19,9 @@
 
 // TODO rewrite load_file  to avoid moving the cursor and such
 
-#define ASSERT_LINE_INTEGRITY 1
-#if ASSERT_LINE_INTEGRITY
-#define assert_line_integrity(state)                                           \
-  _assert_line_integrity(state, __FILE__, __LINE__)
+#if 1
+#define assert_editor_frame_integrity(editor_frame)                            \
+  _assert_editor_frame_integrity(editor_frame, __FILE__, __LINE__)
 
 #define my_assert(cond, file, linenum)                                         \
   if (!(cond)) {                                                               \
@@ -30,8 +29,10 @@
     assert(cond);                                                              \
   }
 
-void assert_editor_frame_integrity(EditorFrame *editor_frame, char *file,
-                                   int16_t linenum) {
+void _assert_editor_frame_integrity(EditorFrame *editor_frame, char *file,
+                                    int16_t linenum) {
+
+  my_assert(editor_frame->cursor.line != NULL, file, linenum);
   Line *prev_line = NULL;
 
   int16_t line_num = 0;
@@ -60,13 +61,8 @@ void assert_editor_frame_integrity(EditorFrame *editor_frame, char *file,
     my_assert(line->max_size > 0, file, linenum);
   }
 }
-
-void _assert_line_integrity(State *state, char *file, int16_t linenum) {
-  my_assert(state->ex_frame.line->next == NULL, file, linenum);
-  assert_editor_frame_integrity(&state->editor_frame, file, linenum);
-}
 #else
-#define assert_line_integrity(state) (void)state
+#define assert_editor_frame_integrity(editor_frame) (void)editor_frame
 #endif
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
@@ -219,15 +215,18 @@ void editor_frame_update_viewport(EditorFrame *frame) {
 }
 
 void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
+  assert(frame->cursor.line != NULL);
   int16_t cursor_line_num = frame->cursor.line_num + d;
+  if (cursor_line_num >= frame->line_count) {
+    cursor_line_num = frame->line_count - 1;
+  }
   if (cursor_line_num < 0) {
     cursor_line_num = 0;
-  } else if (cursor_line_num > frame->line_count) {
-    cursor_line_num = frame->line_count - 1;
   }
 
   frame->cursor.line_num = cursor_line_num;
   frame->cursor.line = frame->index[frame->cursor.line_num];
+  assert(frame->cursor.line != NULL);
 
   editor_frame_update_viewport(frame);
 
@@ -278,7 +277,7 @@ void editor_frame_clear(EditorFrame *frame) {
   frame->line->size = 0;
   frame->line_count = 1;
 
-  assert_editor_frame_integrity(frame, __FILE__, __LINE__);
+  assert_editor_frame_integrity(frame);
 }
 
 void editor_frame_remove_char(EditorFrame *frame) {
@@ -391,7 +390,8 @@ void key_state_machine_reset(KeyStateMachine *ksm) {
   }
 }
 
-enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
+enum KeyStateMachineState key_state_machine_dispatch(State *state,
+                                                     KeyStateMachine *ksm) {
   ExFrame *ex_frame = &state->ex_frame;
   EditorFrame *editor_frame = &state->editor_frame;
 
@@ -405,6 +405,10 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
       ex_frame->cursor_column = 0;
     } break;
     case 'i': {
+      state->mode = AppMode_insert;
+    } break;
+    case 'I': {
+      editor_frame->cursor.column = 0;
       state->mode = AppMode_insert;
     } break;
     case 'h': {
@@ -472,6 +476,8 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
     editor_frame_move_cursor(editor_frame, -1 * (editor_frame->cursor.line_num),
                              &editor_frame->cursor.column);
   }
+
+  assert_editor_frame_integrity(&state->editor_frame);
   return KeyStateMachine_Done;
 }
 
@@ -493,13 +499,13 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
       }
       ksm->operator[ksm->operator_size] = c;
       ksm->operator_size++;
-      new_state = key_dispatch(state, ksm);
+      new_state = key_state_machine_dispatch(state, ksm);
     }
   } break;
   case KeyStateMachine_Operator: {
     ksm->operator[ksm->operator_size] = c;
     ksm->operator_size++;
-    new_state = key_dispatch(state, ksm);
+    new_state = key_state_machine_dispatch(state, ksm);
   } break;
   case KeyStateMachine_Done: {
     assert(false);
@@ -522,7 +528,7 @@ int16_t load_file(SDL_Renderer *renderer, State *state, char *filename) {
   }
 
   editor_frame_clear(&state->editor_frame);
-  assert_line_integrity(state);
+  assert_editor_frame_integrity(&state->editor_frame);
   assert(state->editor_frame.line_count == 1);
 
   char c;
@@ -683,30 +689,27 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
             load_file(buffer->renderer, state, "src/htext_app.c");
-            assert_line_integrity(state);
           } else if (line_eq(ex_frame->line, "clear")) {
             editor_frame_clear(editor_frame);
-            assert_line_integrity(state);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           ex_frame_remove_char(ex_frame);
-          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
           ex_frame->line->size = 0;
           ex_frame->cursor_column = 0;
         }
+        assert_editor_frame_integrity(&state->editor_frame);
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           editor_frame_insert_new_line(&state->arena, editor_frame);
-          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           editor_frame_remove_char(editor_frame);
-          assert_line_integrity(state);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
         }
+        assert_editor_frame_integrity(&state->editor_frame);
         break;
       default:
         assert(false);
