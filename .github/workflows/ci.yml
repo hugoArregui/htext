@@ -26,4 +26,10 @@ jobs:
       - name: test replay
         run: |
           make build-for-playback
+          cp fixtures/playback .
           xvfb-run ./build/htext
+          diff -q dump1 fixtures/dump1
+          diff -q dump2 fixtures/dump2
+          diff -q dump3 fixtures/dump3
+          diff -q dump4 fixtures/dump4
+          diff -q dump5 fixtures/dump5
