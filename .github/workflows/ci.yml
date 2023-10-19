@@ -13,7 +13,7 @@ jobs:
       - name: install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -qq libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev
+          sudo apt-get install -qq libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev xvfb
       - name: report
         run: |
           make report
@@ -23,3 +23,13 @@ jobs:
       - name: test
         run: |
           make test
+      - name: test replay
+        run: |
+          make build-for-playback
+          cp fixtures/playback .
+          xvfb-run ./build/htext
+          diff -q dump1 fixtures/dump1
+          diff -q dump2 fixtures/dump2
+          diff -q dump3 fixtures/dump3
+          diff -q dump4 fixtures/dump4
+          diff -q dump5 fixtures/dump5

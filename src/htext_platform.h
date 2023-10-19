@@ -25,6 +25,7 @@ typedef double real64;
 #define Gigabytes(Value) (Megabytes(Value) * 1024LL)
 #define Terabytes(Value) (Gigabytes(Value) * 1024LL)
 
+#define PLAYBACK_DISABLED 0
 #define PLAYBACK_RECORDING 1
 #define PLAYBACK_PLAYING 2
 

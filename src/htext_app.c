@@ -596,9 +596,10 @@ int16_t dump_file(State *state, char *filename) {
 void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   state->mode = AppMode_normal;
 
-  // NOTE: this is executed once
-  state->font = TTF_cpointer(
-      TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
+  state->font = TTF_cpointer(TTF_OpenFont("IosevkaNerdFont-Regular.ttf", 20));
+  /* state->font = TTF_cpointer( */
+  /*     TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
+   */
 
   state->font_h = TTF_FontHeight(state->font);
 
@@ -723,7 +724,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             if (load_file(buffer->renderer, state, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
+          } else if (line_starts_with(ex_frame->line, "load ")) {
+            ex_frame->line->text[ex_frame->line->size] = '\0';
+            char *filename = ex_frame->line->text + 5;
+            if (load_file(buffer->renderer, state, filename) != 0) {
+              sprintf(state->status_message, "Cannot open %s", filename);
+            }
           } else if (line_starts_with(ex_frame->line, "dump ")) {
+            ex_frame->line->text[ex_frame->line->size] = '\0';
             char *filename = ex_frame->line->text + 5;
             if (dump_file(state, filename) == 0) {
               sprintf(state->status_message, "Wrote to %s", filename);
