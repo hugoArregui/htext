@@ -18,8 +18,6 @@
 #define EX_FONT_COLOR 0xFFFFFF00
 
 // TODO rewrite load_file  to avoid moving the cursor and such
-// TODO dd is not finished:
-//          - delete last line and delete it again
 
 #define ASSERT_LINE_INTEGRITY 1
 #if ASSERT_LINE_INTEGRITY
@@ -287,11 +285,10 @@ void editor_frame_remove_char(EditorFrame *frame) {
     if (frame->cursor.line->prev != NULL) {
       Line *line_to_remove = frame->cursor.line;
 
-      frame->cursor.line = line_to_remove->prev;
-      frame->cursor.line_num--;
+      int16_t column = frame->cursor.line->prev->size;
+      editor_frame_move_cursor(frame, -1, &column);
       editor_frame_delete_line(frame, line_to_remove);
 
-      frame->cursor.column = frame->cursor.line->size;
       if (line_to_remove->size > 0) {
         // we need to join line_to_remove with prev cursor line
         assert(frame->cursor.line->max_size >=
@@ -458,12 +455,12 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
       editor_frame->cursor.column = 0;
     } else {
       for (int16_t i = 0; i < ksm->repetitions; ++i) {
+        // TODO
         Line *line_to_remove = editor_frame->cursor.line;
         if (line_to_remove->next) {
-          editor_frame->cursor.line = line_to_remove->next;
+          editor_frame_move_cursor(editor_frame, 1, NULL);
         } else {
-          editor_frame->cursor.line = line_to_remove->prev;
-          editor_frame->cursor.line_num--;
+          editor_frame_move_cursor(editor_frame, -1, NULL);
         }
         editor_frame_delete_line(editor_frame, line_to_remove);
       }
