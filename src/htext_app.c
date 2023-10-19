@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
@@ -455,14 +456,16 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
       editor_frame->line->size = 0;
       editor_frame->cursor.column = 0;
     } else {
-      // TODO
-      Line *line_to_remove = editor_frame->cursor.line;
-      if (line_to_remove->next) {
-        editor_frame->cursor.line = line_to_remove->next;
-      } else {
-        editor_frame->cursor.line = line_to_remove->prev;
+      for (int16_t i = 0; i < ksm->repetitions; ++i) {
+        Line *line_to_remove = editor_frame->cursor.line;
+        if (line_to_remove->next) {
+          editor_frame->cursor.line = line_to_remove->next;
+        } else {
+          editor_frame->cursor.line = line_to_remove->prev;
+        }
+        editor_frame_delete_line(editor_frame, line_to_remove);
       }
-      editor_frame_delete_line(editor_frame, line_to_remove);
+      editor_frame_reindex(editor_frame);
     }
   } else if (operator[0] == 'g' && operator[1] == 'g') {
     editor_frame_move_cursor(editor_frame, -1 * (editor_frame->cursor.line_num),
