@@ -204,24 +204,11 @@ void editor_frame_cursor_reset(EditorFrame *frame, int16_t *column) {
     frame->cursor.column = *column;
   }
 }
-
-void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
-  int16_t prev_line_num = frame->cursor.line_num;
-  int16_t line_num = frame->cursor.line_num + d;
-  if (line_num < 0) {
-    line_num = 0;
-  } else if (line_num > frame->line_count) {
-    line_num = frame->line_count - 1;
-  }
-
-  frame->cursor.line_num = line_num;
-  frame->cursor.line = frame->index[frame->cursor.line_num];
-
-  d = line_num - prev_line_num;
+void editor_frame_update_viewport(EditorFrame *frame) {
   if ((frame->cursor.line_num < frame->viewport_start) ||
       (frame->cursor.line_num >=
        (frame->viewport_start + frame->viewport_length))) {
-    frame->viewport_start += d;
+    frame->viewport_start = frame->cursor.line_num - frame->viewport_length / 2;
   }
 
   if (frame->viewport_start < 0) {
@@ -229,6 +216,20 @@ void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
   } else if (frame->viewport_start >= frame->line_count) {
     frame->viewport_start = frame->line_count - 1;
   }
+}
+
+void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
+  int16_t cursor_line_num = frame->cursor.line_num + d;
+  if (cursor_line_num < 0) {
+    cursor_line_num = 0;
+  } else if (cursor_line_num > frame->line_count) {
+    cursor_line_num = frame->line_count - 1;
+  }
+
+  frame->cursor.line_num = cursor_line_num;
+  frame->cursor.line = frame->index[frame->cursor.line_num];
+
+  editor_frame_update_viewport(frame);
 
   if (column != NULL) {
     frame->cursor.column = *column;
@@ -455,12 +456,13 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
       editor_frame->cursor.column = 0;
     } else {
       for (int16_t i = 0; i < ksm->repetitions; ++i) {
-        // TODO
         Line *line_to_remove = editor_frame->cursor.line;
         if (line_to_remove->next) {
-          editor_frame_move_cursor(editor_frame, 1, NULL);
+          editor_frame->cursor.line = line_to_remove->next;
         } else {
-          editor_frame_move_cursor(editor_frame, -1, NULL);
+          editor_frame->cursor.line = line_to_remove->prev;
+          editor_frame->cursor.line_num--;
+          editor_frame_update_viewport(editor_frame);
         }
         editor_frame_delete_line(editor_frame, line_to_remove);
       }
@@ -877,9 +879,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
     }
-
-    dest.y += state->font_h;
 
     {
       sprintf(text, "Editor frame cursor line number: %d",
@@ -888,6 +889,17 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
+    }
+
+    {
+      sprintf(text, "Editor frame viewport start: %d, size:%d",
+              editor_frame->viewport_start, editor_frame->viewport_length);
+      SDL_Texture *texture = texture_from_text(
+          buffer->debugRenderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+      SDL_DestroyTexture(texture);
+      dest.y += state->font_h;
     }
 
     dest.y += state->font_h;
