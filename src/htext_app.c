@@ -18,7 +18,8 @@
 #define EX_FONT_COLOR 0xFFFFFF00
 
 // TODO rewrite load_file  to avoid moving the cursor and such
-// TODO dd is not finished
+// TODO dd is not finished:
+//          - delete last line and delete it again
 
 #define ASSERT_LINE_INTEGRITY 1
 #if ASSERT_LINE_INTEGRITY
@@ -462,6 +463,7 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
           editor_frame->cursor.line = line_to_remove->next;
         } else {
           editor_frame->cursor.line = line_to_remove->prev;
+          editor_frame->cursor.line_num--;
         }
         editor_frame_delete_line(editor_frame, line_to_remove);
       }
