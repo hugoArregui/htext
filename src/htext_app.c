@@ -239,39 +239,55 @@ void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
   }
 }
 
-void editor_frame_clear(EditorFrame *frame) {
-  for (Line *line = frame->line->next; line != NULL;) {
-    line_invalidate_texture(line);
-    Line *next_line = line->next;
-    line->next = NULL;
-    if (frame->deleted_line == NULL) {
-      frame->deleted_line = line;
-    } else {
-      line_insert_next(frame->deleted_line, line);
+void editor_frame_delete_line(EditorFrame *frame, Line *line) {
+  Line *prev_line = line->prev;
+  Line *next_line = line->next;
+
+  line_invalidate_texture(line);
+
+  if (frame->line == line) {
+    assert(next_line != NULL);
+    frame->line = next_line;
+    frame->line->prev = NULL;
+  } else {
+    assert(prev_line != NULL);
+    prev_line->next = next_line;
+    if (next_line != NULL) {
+      next_line->prev = prev_line;
     }
-    line = next_line;
   }
-  int16_t new_column = 0;
+
+  line->next = NULL;
+  if (frame->deleted_line == NULL) {
+    frame->deleted_line = line;
+  } else {
+    line_insert_next(frame->deleted_line, line);
+  }
+
+  frame->line_count--;
+}
+
+void editor_frame_clear(EditorFrame *frame) {
+  while (frame->line->next != NULL) {
+    editor_frame_delete_line(frame, frame->line->next);
+  }
+  static int16_t new_column = 0;
   editor_frame_cursor_reset(frame, &new_column);
   frame->cursor.line->next = NULL;
   frame->line->size = 0;
   frame->line_count = 1;
+
+  assert_editor_frame_integrity(frame, __FILE__, __LINE__);
 }
 
 void editor_frame_remove_char(EditorFrame *frame) {
   if (frame->cursor.column == 0) {
     if (frame->cursor.line->prev != NULL) {
       Line *line_to_remove = frame->cursor.line;
-      line_invalidate_texture(line_to_remove);
 
-      // we remove line_to_remove
       frame->cursor.line = line_to_remove->prev;
-      frame->cursor.line->next = line_to_remove->next;
       frame->cursor.line_num--;
-      if (frame->cursor.line->next != NULL) {
-        frame->cursor.line->next->prev = frame->cursor.line;
-      }
-      frame->line_count--;
+      editor_frame_delete_line(frame, line_to_remove);
 
       frame->cursor.column = frame->cursor.line->size;
       if (line_to_remove->size > 0) {
@@ -283,12 +299,6 @@ void editor_frame_remove_char(EditorFrame *frame) {
         frame->cursor.line->size += line_to_remove->size;
       }
 
-      if (frame->deleted_line == NULL) {
-        frame->deleted_line = line_to_remove;
-        frame->deleted_line->next = NULL;
-      } else {
-        line_insert_next(frame->deleted_line, line_to_remove);
-      }
       editor_frame_reindex(frame);
     }
   } else {
@@ -415,7 +425,7 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
       editor_frame_move_cursor(editor_frame, -1 * (ksm->repetitions), NULL);
     } break;
     case 'j': {
-        editor_frame_move_cursor(editor_frame, ksm->repetitions, NULL);
+      editor_frame_move_cursor(editor_frame, ksm->repetitions, NULL);
     } break;
     case 'H': {
       editor_frame->cursor.column = 0;
@@ -430,7 +440,7 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
     case 'G': {
       editor_frame_move_cursor(
           editor_frame,
-          (editor_frame->line_count - editor_frame->cursor.line_num -1),
+          (editor_frame->line_count - editor_frame->cursor.line_num - 1),
           &editor_frame->cursor.column);
     } break;
     case 'd':
@@ -441,11 +451,18 @@ enum KeyStateMachineState key_dispatch(State *state, KeyStateMachine *ksm) {
   } else if (operator[0] == 'd' && operator[1] == 'd') {
     key_state_machine_reset(ksm);
 
-    if (editor_frame->line == editor_frame->cursor.line) {
+    if (editor_frame->line_count == 1) {
       editor_frame->line->size = 0;
       editor_frame->cursor.column = 0;
     } else {
       // TODO
+      Line *line_to_remove = editor_frame->cursor.line;
+      if (line_to_remove->next) {
+        editor_frame->cursor.line = line_to_remove->next;
+      } else {
+        editor_frame->cursor.line = line_to_remove->prev;
+      }
+      editor_frame_delete_line(editor_frame, line_to_remove);
     }
   } else if (operator[0] == 'g' && operator[1] == 'g') {
     editor_frame_move_cursor(editor_frame, -1 * (editor_frame->cursor.line_num),
@@ -540,8 +557,6 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   state->mode = AppMode_normal;
 
   // NOTE: this is executed once
-  // TODO: there are a bunch of things that should be cleared here at exit,
-  // not sure if we care
   state->font = TTF_cpointer(
       TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
 
