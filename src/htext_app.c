@@ -596,9 +596,10 @@ int16_t dump_file(State *state, char *filename) {
 void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   state->mode = AppMode_normal;
 
-  // NOTE: this is executed once
-  state->font = TTF_cpointer(
-      TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
+  state->font = TTF_cpointer(TTF_OpenFont("IosevkaNerdFont-Regular.ttf", 20));
+  /* state->font = TTF_cpointer( */
+  /*     TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
+   */
 
   state->font_h = TTF_FontHeight(state->font);
 

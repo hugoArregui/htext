@@ -11,10 +11,19 @@ report:
 	clang --version
 	uname -r
 
-build: clean
+_build: clean
 	mkdir -p build/
-	$(CC) -fPIC $(CFLAGS) -shared src/htext_app.c -o build/htext.so $(LIBS)
-	$(CC) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c $(LIBS)
+	$(CC) -DDEBUG_PLAYBACK=$(DEBUG_PLAYBACK) -fPIC $(CFLAGS) -shared src/htext_app.c -o build/htext.so $(LIBS)
+	$(CC) -DDEBUG_PLAYBACK=$(DEBUG_PLAYBACK) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c $(LIBS)
+
+build:
+	DEBUG_PLAYBACK=0 make _build
+
+build-for-recording:
+	DEBUG_PLAYBACK=1 make _build
+
+build-for-playback:
+	DEBUG_PLAYBACK=2 make _build
 
 test: clean
 	mkdir -p build/
@@ -28,3 +37,4 @@ clean:
 	rm -f build/*
 
 .DEFAULT_GOAL := build
+.PHONY: build
