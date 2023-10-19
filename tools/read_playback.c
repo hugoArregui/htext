@@ -19,20 +19,20 @@ int main(void) {
     case SDL_KEYDOWN: {
       switch (event.key.keysym.scancode) {
       case SDL_SCANCODE_BACKSPACE: {
-      printf("keydown: backspace\n");
+      printf("[backspace] ");
       } break;
       case SDL_SCANCODE_ESCAPE: {
-      printf("keydown: escape\n");
+      printf("[escape] ");
       } break;
       case SDL_SCANCODE_RETURN: {
-      printf("keydown: return\n");
+      printf("[enter] \n");
       } break;
       default: {
       } break;
       }
     } break;
     case SDL_TEXTINPUT: {
-      printf("text input: %s\n", event.text.text);
+      printf("%s", event.text.text);
     } break;
     }
 
