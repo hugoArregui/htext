@@ -5,8 +5,7 @@
 int main(void) {
   void *baseAddress = (void *)(0);
 
-  uint64 totalSize = Megabytes(256);
-  // NOTE: MAP_ANONYMOUS content initialized to zero
+  uint64_t totalSize = Megabytes(256);
   void *gameMemoryBlock = mmap(baseAddress, totalSize, PROT_READ | PROT_WRITE,
                                MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   assert(gameMemoryBlock != MAP_FAILED);
@@ -16,11 +15,12 @@ int main(void) {
   initializeArena(&arena, totalSize, gameMemoryBlock);
 
   Line *line = line_create(&arena);
-  EditorFrame frame = (EditorFrame){.line = line,
-                                .cursor = (Cursor){.line = line, .column = 0},
-                                .line_count = 1};
+  EditorFrame frame =
+      (EditorFrame){.line = line,
+                    .cursor = (Cursor){.line = line, .column = 0},
+                    .line_count = 1};
 
-  cursor_insert_text(&frame.cursor, "hello world", 11);
+  line_insert_text(frame.cursor.line, &frame.cursor.column, "hello world", 11);
   assert(frame.line == frame.cursor.line);
   assert(frame.cursor.column == 11);
   assert(frame.line->prev == NULL);
@@ -28,7 +28,7 @@ int main(void) {
 
   //----
   frame.cursor.column = 5;
-  cursor_insert_text(&frame.cursor, ",", 1);
+  line_insert_text(frame.cursor.line, &frame.cursor.column, ",", 1);
   assert(frame.line->size == 12);
   assert(frame.line->prev == NULL);
   assert(line_eq(frame.line, "hello, world"));

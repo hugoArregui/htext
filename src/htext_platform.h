@@ -1,4 +1,3 @@
-#include <SDL2/SDL_render.h>
 #ifndef __H_TEXT_MAIN
 #define __H_TEXT_MAIN
 
@@ -6,23 +5,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <float.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef uintptr_t uintptr;
 
 typedef size_t memory_index;
 
@@ -45,7 +32,7 @@ typedef double real64;
 /* #define DEBUG_PLAYBACK PLAYBACK_PLAYING */
 
 typedef struct {
-  uint64 totalSize;
+  uint64_t totalSize;
   void *gameMemoryBlock;
 } PlatformState;
 
@@ -60,24 +47,24 @@ typedef struct {
 } SdlOffscreenBuffer;
 
 typedef struct {
-  uint64 permanentStorageSize;
+  uint64_t permanentStorageSize;
   void *permanentStorage; // NOTE(casey): REQUIRED to be cleared to zero at
                           // startup
 
-  uint64 transientStorageSize;
+  uint64_t transientStorageSize;
   void *transientStorage; // NOTE(casey): REQUIRED to be cleared to zero at
                           // startup
 } Memory;
 
 typedef struct {
   real32 dtForFrame;
-  bool32 executableReloaded;
+  bool executableReloaded;
   int keypressed;
 
   char text[32];
 
 #if DEBUG_RECORDING || DEBUG_PLAYBACK
-  FILE* playbackFile;
+  FILE *playbackFile;
 #endif
 } Input;
 
@@ -99,7 +86,7 @@ typedef struct {
   // check before calling.
   update_and_render *updateAndRender;
 
-  bool32 isValid;
+  bool isValid;
 } Code;
 
 #endif

@@ -13,13 +13,16 @@ report:
 
 build: clean
 	mkdir -p build/
-	$(CC) -fPIC $(CFLAGS) -shared src/htext_app.c src/htext_sdl.c -o build/htext.so $(LIBS)
-	$(CC) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c src/htext_sdl.c $(LIBS)
+	$(CC) -fPIC $(CFLAGS) -shared src/htext_app.c -o build/htext.so $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c $(LIBS)
 
 test: clean
 	mkdir -p build/
-	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c src/htext_sdl.c $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c $(LIBS)
 	./build/tests
+
+format:
+	clang-format -i src/*.c src/*.h
 
 clean:
 	rm -f build/*
