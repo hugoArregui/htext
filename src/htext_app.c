@@ -1,6 +1,8 @@
 #include "htext_app.h"
 #include "htext_sdl.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_pixels.h>
+#include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,9 +17,9 @@
 #define MODELINE_BG_COLOR 0x595959FF
 #define MODELINE_FONT_COLOR 0xFFFFFF00
 
-#define EX_FONT_COLOR 0xFFFFFF00
+#define STATUS_MESSAGE_FONT_COLOR 0xFFFFFF00
 
-// TODO rewrite load_file  to avoid moving the cursor and such
+#define EX_FONT_COLOR 0xFFFFFF00
 
 #if 1
 #define assert_editor_frame_integrity(editor_frame)                            \
@@ -478,6 +480,8 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
   }
 
   assert_editor_frame_integrity(&state->editor_frame);
+
+  state->status_message[0] = '\0';
   return KeyStateMachine_Done;
 }
 
@@ -521,6 +525,7 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
   }
 }
 
+// TODO rewrite to avoid moving the cursor and such
 int16_t load_file(SDL_Renderer *renderer, State *state, char *filename) {
   FILE *f = fopen(filename, "r");
   if (!f) {
@@ -560,6 +565,26 @@ int16_t load_file(SDL_Renderer *renderer, State *state, char *filename) {
   state->filename_texture =
       texture_from_text(renderer, state->font, state->filename, color,
                         &state->filename_texture_width);
+  return 0;
+}
+
+int16_t dump_file(State *state, char *filename) {
+  FILE *f = fopen(filename, "w");
+  if (!f) {
+    return -1;
+  }
+
+  EditorFrame *editor_frame = &state->editor_frame;
+
+  char new_line = '\n';
+
+  for (Line *line = editor_frame->line; line != NULL; line = line->next) {
+    fwrite(line->text, line->size, 1, f);
+    fwrite(&new_line, 1, 1, f);
+  }
+
+  fclose(f);
+
   return 0;
 }
 
@@ -615,6 +640,7 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
       cached_texture_create(renderer, state->font, "INSERT | ", modeColor);
 
   state->filename = NULL;
+  state->status_message[0] = '\0';
 
   key_state_machine_reset(&state->normal_ksm);
 }
@@ -688,7 +714,15 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             state_destroy(state);
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
-            load_file(buffer->renderer, state, "src/htext_app.c");
+            char *filename = "src/htext_app.c";
+            if (load_file(buffer->renderer, state, filename) != 0) {
+              sprintf(state->status_message, "Cannot open %s", filename);
+            }
+          } else if (line_eq(ex_frame->line, "dump")) {
+            char *filename = "dump.0";
+            if (dump_file(state, "dump.0") != 0) {
+              sprintf(state->status_message, "Cannot write to %s", filename);
+            }
           } else if (line_eq(ex_frame->line, "clear")) {
             editor_frame_clear(editor_frame);
           }
@@ -860,6 +894,17 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     render_line(state, buffer->renderer, ex_frame->line,
                 &ex_frame->cursor_column, dest.x, dest.y,
                 state->mode == AppMode_ex, color);
+  } else if (strlen(state->status_message) > 0) {
+    int16_t x = 0.005 * buffer->width;
+    SDL_Rect dest;
+    dest.x = x;
+    dest.y = ex_frame_start_y;
+    dest.h = state->font_h;
+
+    SDL_Color color = {UNHEX(STATUS_MESSAGE_FONT_COLOR)};
+    SDL_Texture *texture = texture_from_text(
+        buffer->renderer, state->font, state->status_message, color, &dest.w);
+    SDL_ccode(SDL_RenderCopy(buffer->renderer, texture, NULL, &dest));
   }
 
 #if DEBUG_WINDOW

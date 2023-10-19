@@ -188,6 +188,8 @@ typedef struct {
 
   MemoryArena arena;
 
+  char status_message[200];
+
   EditorFrame editor_frame;
   ExFrame ex_frame;
 
