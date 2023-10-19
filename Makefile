@@ -16,6 +16,8 @@ _build: clean
 	$(CC) -DDEBUG_PLAYBACK=$(DEBUG_PLAYBACK) -fPIC $(CFLAGS) -shared src/htext_app.c -o build/htext.so $(LIBS)
 	$(CC) -DDEBUG_PLAYBACK=$(DEBUG_PLAYBACK) $(CFLAGS) $(DEBUG) -o build/htext src/htext_platform.c $(LIBS)
 
+	$(CC) $(CFLAGS) $(DEBUG) -o build/read_playback tools/read_playback.c
+
 build:
 	DEBUG_PLAYBACK=0 make _build
 
@@ -31,7 +33,7 @@ test: clean
 	./build/tests
 
 format:
-	clang-format -i src/*.c src/*.h
+	clang-format -i src/*.c src/*.h tools/*.c
 
 clean:
 	rm -f build/*
