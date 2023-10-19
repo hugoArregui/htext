@@ -724,6 +724,11 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             if (load_file(buffer->renderer, state, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
+          } else if (line_starts_with(ex_frame->line, "load ")) {
+            char *filename = ex_frame->line->text + 5;
+            if (load_file(buffer->renderer, state, filename) != 0) {
+              sprintf(state->status_message, "Cannot open %s", filename);
+            }
           } else if (line_starts_with(ex_frame->line, "dump ")) {
             char *filename = ex_frame->line->text + 5;
             if (dump_file(state, filename) == 0) {
