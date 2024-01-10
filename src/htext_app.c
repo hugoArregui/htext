@@ -87,16 +87,6 @@ CachedTexture cached_texture_create(SDL_Renderer *renderer, TTF_Font *font,
   return cached;
 }
 
-void render_cursor(SDL_Renderer *renderer, SDL_Rect *dest, bool fill) {
-  SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
-  SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(CURSOR_COLOR)));
-  if (fill) {
-    SDL_ccode(SDL_RenderFillRect(renderer, dest));
-  } else {
-    SDL_ccode(SDL_RenderDrawRect(renderer, dest));
-  }
-}
-
 bool line_eq(Line *line, char *str) {
   return ((int16_t)strlen(str)) == line->size &&
          strncmp(line->text, str, line->size) == 0;
@@ -148,7 +138,13 @@ void render_line(State *state, SDL_Renderer *renderer, Line *line,
     cursorDest.y = dest.y;
     cursorDest.h = state->font_h;
     cursorDest.w = cursor_w;
-    render_cursor(renderer, &cursorDest, is_cursor_active);
+    SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
+    SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(CURSOR_COLOR)));
+    if (is_cursor_active) {
+      SDL_ccode(SDL_RenderFillRect(renderer, &cursorDest));
+    } else {
+      SDL_ccode(SDL_RenderDrawRect(renderer, &cursorDest));
+    }
   }
 
   if (line->size > 0) {
