@@ -249,3 +249,22 @@ void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   static int16_t new_column = 0;
   editor_frame_move_cursor_v(frame, 1, &new_column);
 }
+
+void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
+  for (int16_t i = 0; i < n; ++i) {
+    Line *line_to_remove = frame->cursor.line;
+    if (frame->line_count == 1) {
+      frame->line->size = 0;
+      frame->cursor.column = 0;
+      break;
+    } else if (line_to_remove->next) {
+      frame->cursor.line = line_to_remove->next;
+    } else {
+      frame->cursor.line = line_to_remove->prev;
+      frame->cursor.line_num--;
+      editor_frame_update_viewport(frame);
+    }
+    editor_frame_delete_line(frame, line_to_remove);
+  }
+  editor_frame_reindex(frame);
+}
