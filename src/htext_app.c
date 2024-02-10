@@ -361,35 +361,13 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
   }
 }
 
-// TODO rewrite to avoid moving the cursor and such
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
-  FILE *f = fopen(filename, "r");
-  if (!f) {
-    return -1;
+
+  int r = editor_frame_load_file(&state->arena, &state->editor_frame, filename);
+  if (r < 0) {
+    return r;
   }
-
-  editor_frame_clear(&state->editor_frame);
-  assert_editor_frame_integrity(&state->editor_frame);
-  assert(state->editor_frame.line_count == 1);
-
-  char c;
-  int16_t read_size = fread(&c, sizeof(char), 1, f);
-  while (read_size > 0) {
-    if (c == '\n') {
-      editor_frame_insert_new_line(&state->arena, &state->editor_frame);
-    } else {
-      assert(c >= 32);
-      line_insert_text(state->editor_frame.cursor.line,
-                       &state->editor_frame.cursor.column, &c, 1);
-    }
-    read_size = fread(&c, sizeof(char), 1, f);
-  }
-  fclose(f);
-
-  static int16_t column = 0;
-  editor_frame_cursor_reset(&state->editor_frame, &column);
-  editor_frame_reindex(&state->editor_frame);
 
   // TODO(leak): reuse string if already is reserved
   state->filename = pushString(&state->arena, filename);
