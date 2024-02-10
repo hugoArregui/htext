@@ -306,24 +306,7 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
     }
   } else if (operator[0] == 'd' && operator[1] == 'd') {
     key_state_machine_reset(ksm);
-
-    if (editor_frame->line_count == 1) {
-      editor_frame->line->size = 0;
-      editor_frame->cursor.column = 0;
-    } else {
-      for (int16_t i = 0; i < ksm->repetitions; ++i) {
-        Line *line_to_remove = editor_frame->cursor.line;
-        if (line_to_remove->next) {
-          editor_frame->cursor.line = line_to_remove->next;
-        } else {
-          editor_frame->cursor.line = line_to_remove->prev;
-          editor_frame->cursor.line_num--;
-          editor_frame_update_viewport(editor_frame);
-        }
-        editor_frame_delete_line(editor_frame, line_to_remove);
-      }
-      editor_frame_reindex(editor_frame);
-    }
+    editor_frame_remove_lines(editor_frame, ksm->repetitions);
   } else if (operator[0] == 'g' && operator[1] == 'g') {
     editor_frame_move_cursor_v(editor_frame,
                                -1 * (editor_frame->cursor.line_num),
