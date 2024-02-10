@@ -14,18 +14,18 @@ int main(void) {
 
   SDL_Event event;
   int16_t read_size = fread(&event, sizeof(SDL_Event), 1, f);
-  while(read_size == 1) {
+  while (read_size == 1) {
     switch (event.type) {
     case SDL_KEYDOWN: {
       switch (event.key.keysym.scancode) {
       case SDL_SCANCODE_BACKSPACE: {
-      printf("[backspace] ");
+        printf("[backspace] ");
       } break;
       case SDL_SCANCODE_ESCAPE: {
-      printf("[escape] ");
+        printf("[escape] ");
       } break;
       case SDL_SCANCODE_RETURN: {
-      printf("[enter] \n");
+        printf("[enter] \n");
       } break;
       default: {
       } break;
@@ -36,7 +36,7 @@ int main(void) {
     } break;
     }
 
-   read_size = fread(&event, sizeof(SDL_Event), 1, f);
+    read_size = fread(&event, sizeof(SDL_Event), 1, f);
   }
 
   fclose(f);

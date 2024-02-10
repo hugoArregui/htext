@@ -136,6 +136,11 @@ typedef struct {
 } Cursor;
 
 typedef struct {
+  int16_t start;
+  int16_t size;
+} Viewport;
+
+typedef struct {
   Line *line;
   int16_t line_count;
   // NOTE: currently I use this only to optimize the rendering window, so it
@@ -144,8 +149,8 @@ typedef struct {
 
   Cursor cursor;
 
-  int16_t viewport_start;
-  int16_t viewport_length;
+  Viewport viewport_v;
+  Viewport viewport_h;
 
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line *deleted_line;
@@ -211,6 +216,12 @@ typedef struct {
 
   KeyStateMachine normal_ksm;
 } State;
+
+typedef struct {
+  State *state;
+  SDL_Renderer *renderer;
+  MemoryArena *transient_arena;
+} RendererContext;
 
 #define __H_TEXT_APP
 #endif
