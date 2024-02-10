@@ -2,6 +2,7 @@
 #include "htext_sdl.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_pixels.h>
+#include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
@@ -117,19 +118,22 @@ void line_invalidate_texture(Line *line) {
   }
 }
 
-void render_line(State *state, SDL_Renderer *renderer, Line *line,
-                 int16_t *cursor_column, int16_t x_start, int16_t y_start,
-                 bool is_cursor_active, SDL_Color color) {
+void editor_frame_render_line(RendererContext context, Line *line,
+                              SDL_Point start, SDL_Color color) {
+  State *state = context.state;
+  EditorFrame *frame = &state->editor_frame;
+  Viewport viewport_h = frame->viewport_h;
+  int16_t cursor_column = frame->cursor.column;
   const int16_t cursor_w = state->font_h / 2;
 
   SDL_Rect dest;
-  dest.x = x_start;
-  dest.y = y_start;
+  dest.x = start.x;
+  dest.y = start.y;
   dest.h = state->font_h;
 
-  if (cursor_column != NULL) {
+  if (line == frame->cursor.line) {
     int16_t cursor_x = dest.x;
-    for (int16_t i = 0; i < *cursor_column; ++i) {
+    for (int16_t i = 0; i < cursor_column - viewport_h.start; ++i) {
       cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
     }
 
@@ -138,28 +142,83 @@ void render_line(State *state, SDL_Renderer *renderer, Line *line,
     cursorDest.y = dest.y;
     cursorDest.h = state->font_h;
     cursorDest.w = cursor_w;
-    SDL_ccode(SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND));
-    SDL_ccode(SDL_SetRenderDrawColor(renderer, UNHEX(CURSOR_COLOR)));
-    if (is_cursor_active) {
-      SDL_ccode(SDL_RenderFillRect(renderer, &cursorDest));
+    SDL_ccode(
+        SDL_SetRenderDrawBlendMode(context.renderer, SDL_BLENDMODE_BLEND));
+    SDL_ccode(SDL_SetRenderDrawColor(context.renderer, UNHEX(CURSOR_COLOR)));
+
+    if (state->mode != AppMode_ex) {
+      SDL_ccode(SDL_RenderFillRect(context.renderer, &cursorDest));
     } else {
-      SDL_ccode(SDL_RenderDrawRect(renderer, &cursorDest));
+      SDL_ccode(SDL_RenderDrawRect(context.renderer, &cursorDest));
     }
   }
 
   if (line->size > 0) {
-    if (line->texture == NULL) {
-      line->text[line->size] = '\0';
-      line->texture = texture_from_text(renderer, state->font, line->text,
-                                        color, &line->texture_width);
-    }
+    bool should_render_line = line->size > viewport_h.start;
+    if (line->texture == NULL && should_render_line) {
+      int str_to_render_size = line->size - viewport_h.start;
+      if (str_to_render_size > viewport_h.size) {
+        str_to_render_size = viewport_h.size;
+      }
+      char *str_to_render = pushSize(context.transient_arena,
+                                     str_to_render_size + 1, DEFAULT_ALIGMENT);
+      memcpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
+      str_to_render[str_to_render_size] = '\0';
 
-    dest.w = line->texture_width;
-    SDL_ccode(SDL_RenderCopy(renderer, line->texture, NULL, &dest));
+      line->texture =
+          texture_from_text(context.renderer, state->font, str_to_render, color,
+                            &line->texture_width);
+    }
+    if (line->texture != NULL && should_render_line) {
+      dest.w = line->texture_width;
+      SDL_ccode(SDL_RenderCopy(context.renderer, line->texture, NULL, &dest));
+    }
   }
 
   dest.y += state->font_h;
-  dest.x = x_start;
+  dest.x = start.x;
+}
+
+void ex_frame_render_line(RendererContext context, Line *line,
+                          int16_t cursor_column, SDL_Point start,
+                          SDL_Color color) {
+  State *state = context.state;
+  const int16_t cursor_w = state->font_h / 2;
+
+  SDL_Rect dest;
+  dest.x = start.x;
+  dest.y = start.y;
+  dest.h = state->font_h;
+
+  int16_t cursor_x = dest.x;
+  for (int16_t i = 0; i < cursor_column; ++i) {
+    cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
+  }
+
+  SDL_Rect cursorDest;
+  cursorDest.x = cursor_x;
+  cursorDest.y = dest.y;
+  cursorDest.h = state->font_h;
+  cursorDest.w = cursor_w;
+  SDL_ccode(SDL_SetRenderDrawBlendMode(context.renderer, SDL_BLENDMODE_BLEND));
+  SDL_ccode(SDL_SetRenderDrawColor(context.renderer, UNHEX(CURSOR_COLOR)));
+  SDL_ccode(SDL_RenderFillRect(context.renderer, &cursorDest));
+
+  if (line->size > 0) {
+    if (line->texture == NULL) {
+      line->text[line->size] = '\0';
+      line->texture =
+          texture_from_text(context.renderer, state->font, line->text, color,
+                            &line->texture_width);
+    }
+    if (line->texture != NULL) {
+      dest.w = line->texture_width;
+      SDL_ccode(SDL_RenderCopy(context.renderer, line->texture, NULL, &dest));
+    }
+  }
+
+  dest.y += state->font_h;
+  dest.x = start.x;
 }
 
 Line *line_create(MemoryArena *arena) {
@@ -196,28 +255,47 @@ void editor_frame_reindex(EditorFrame *frame) {
 }
 
 void editor_frame_cursor_reset(EditorFrame *frame, int16_t *column) {
-  frame->viewport_start = 0;
+  frame->viewport_v.start = 0;
+  frame->viewport_h.start = 0;
   frame->cursor.line_num = 0;
   frame->cursor.line = frame->line;
   if (column != NULL) {
     frame->cursor.column = *column;
   }
 }
+
 void editor_frame_update_viewport(EditorFrame *frame) {
-  if ((frame->cursor.line_num < frame->viewport_start) ||
+  if ((frame->cursor.line_num < frame->viewport_v.start) ||
       (frame->cursor.line_num >=
-       (frame->viewport_start + frame->viewport_length))) {
-    frame->viewport_start = frame->cursor.line_num - frame->viewport_length / 2;
+       (frame->viewport_v.start + frame->viewport_v.size))) {
+    frame->viewport_v.start =
+        frame->cursor.line_num - frame->viewport_v.size / 2;
   }
 
-  if (frame->viewport_start < 0) {
-    frame->viewport_start = 0;
-  } else if (frame->viewport_start >= frame->line_count) {
-    frame->viewport_start = frame->line_count - 1;
+  if (frame->viewport_v.start < 0) {
+    frame->viewport_v.start = 0;
+  } else if (frame->viewport_v.start >= frame->line_count) {
+    frame->viewport_v.start = frame->line_count - 1;
+  }
+
+  if ((frame->cursor.column < frame->viewport_h.start) ||
+      (frame->cursor.column >=
+       (frame->viewport_h.start + frame->viewport_h.size))) {
+    frame->viewport_h.start = frame->cursor.column - frame->viewport_h.size / 2;
+  }
+
+  if (frame->viewport_h.start < 0) {
+    frame->viewport_h.start = 0;
+    // TODO
+    /* } else if (frame->viewport_h.start >= frame->viewport_h.size) { */
+    /*   frame->viewport_h.start = frame->viewport_h.size - 1; */
   }
 }
 
-void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
+// NOTE: moves cursor vertically,
+// if a column is specified it will be used as cursor.column
+void editor_frame_move_cursor_v(EditorFrame *frame, int16_t d,
+                                int16_t *column) {
   assert(frame->cursor.line != NULL);
   int16_t cursor_line_num = frame->cursor.line_num + d;
   if (cursor_line_num >= frame->line_count) {
@@ -240,6 +318,29 @@ void editor_frame_move_cursor(EditorFrame *frame, int16_t d, int16_t *column) {
       frame->cursor.column = frame->cursor.line->size;
     }
   }
+}
+
+void editor_frame_move_cursor_h(EditorFrame *frame, int16_t d) {
+  assert(frame->cursor.line != NULL);
+
+  int16_t column = frame->cursor.column + d;
+  if (column < 0) {
+    column = 0;
+  }
+  if (column > frame->cursor.line->size) {
+    column = frame->cursor.line->size;
+  }
+
+  frame->cursor.column = column;
+  if (column < frame->viewport_h.start ||
+      column >= (frame->viewport_h.start + frame->viewport_h.size)) {
+
+    for (int16_t i = frame->viewport_v.start; i < frame->viewport_v.size; ++i) {
+      line_invalidate_texture(frame->index[i]);
+    }
+  }
+
+  editor_frame_update_viewport(frame);
 }
 
 void editor_frame_delete_line(EditorFrame *frame, Line *line) {
@@ -289,7 +390,7 @@ void editor_frame_remove_char(EditorFrame *frame) {
       Line *line_to_remove = frame->cursor.line;
 
       int16_t column = frame->cursor.line->prev->size;
-      editor_frame_move_cursor(frame, -1, &column);
+      editor_frame_move_cursor_v(frame, -1, &column);
       editor_frame_delete_line(frame, line_to_remove);
 
       if (line_to_remove->size > 0) {
@@ -341,7 +442,7 @@ void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   frame->line_count++;
   editor_frame_reindex(frame);
   static int16_t new_column = 0;
-  editor_frame_move_cursor(frame, 1, &new_column);
+  editor_frame_move_cursor_v(frame, 1, &new_column);
 }
 
 void ex_frame_remove_char(ExFrame *frame) {
@@ -415,37 +516,31 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
       state->mode = AppMode_insert;
     } break;
     case 'h': {
-      int16_t column = editor_frame->cursor.column - ksm->repetitions;
-      if (column < 0) {
-        column = 0;
-      }
-      editor_frame->cursor.column = column;
+      editor_frame_move_cursor_h(editor_frame, -1 * (ksm->repetitions));
     } break;
     case 'l': {
-      int16_t column = editor_frame->cursor.column + ksm->repetitions;
-      if (column > editor_frame->cursor.line->size) {
-        column = editor_frame->cursor.line->size;
-      }
-      editor_frame->cursor.column = column;
+      editor_frame_move_cursor_h(editor_frame, 1 * (ksm->repetitions));
     } break;
     case 'k': {
-      editor_frame_move_cursor(editor_frame, -1 * (ksm->repetitions), NULL);
+      editor_frame_move_cursor_v(editor_frame, -1 * (ksm->repetitions), NULL);
     } break;
     case 'j': {
-      editor_frame_move_cursor(editor_frame, ksm->repetitions, NULL);
+      editor_frame_move_cursor_v(editor_frame, ksm->repetitions, NULL);
     } break;
     case 'H': {
-      editor_frame->cursor.column = 0;
+      editor_frame_move_cursor_h(editor_frame,
+                                 -1 * editor_frame->cursor.column);
     } break;
     case 'L': {
-      editor_frame->cursor.column = editor_frame->cursor.line->size;
+      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->size -
+                                                   editor_frame->cursor.column);
     } break;
     case 'A': {
       editor_frame->cursor.column = editor_frame->cursor.line->size;
       state->mode = AppMode_insert;
     } break;
     case 'G': {
-      editor_frame_move_cursor(
+      editor_frame_move_cursor_v(
           editor_frame,
           (editor_frame->line_count - editor_frame->cursor.line_num - 1),
           &editor_frame->cursor.column);
@@ -476,8 +571,9 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
       editor_frame_reindex(editor_frame);
     }
   } else if (operator[0] == 'g' && operator[1] == 'g') {
-    editor_frame_move_cursor(editor_frame, -1 * (editor_frame->cursor.line_num),
-                             &editor_frame->cursor.column);
+    editor_frame_move_cursor_v(editor_frame,
+                               -1 * (editor_frame->cursor.line_num),
+                               &editor_frame->cursor.column);
   }
 
   assert_editor_frame_integrity(&state->editor_frame);
@@ -527,7 +623,8 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 }
 
 // TODO rewrite to avoid moving the cursor and such
-int16_t load_file(SDL_Renderer *renderer, State *state, char *filename) {
+int16_t load_file(RendererContext context, char *filename) {
+  State *state = context.state;
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
@@ -564,7 +661,7 @@ int16_t load_file(SDL_Renderer *renderer, State *state, char *filename) {
     SDL_DestroyTexture(state->filename_texture);
   }
   state->filename_texture =
-      texture_from_text(renderer, state->font, state->filename, color,
+      texture_from_text(context.renderer, state->font, state->filename, color,
                         &state->filename_texture_width);
   return 0;
 }
@@ -626,7 +723,8 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
         (EditorFrame){.line = line,
                       .cursor = (Cursor){.line = line, .column = 0},
                       .line_count = 1,
-                      .viewport_start = 0};
+                      .viewport_v.start = 0,
+                      .viewport_h.start = 0};
     editor_frame_reindex(&state->editor_frame);
   }
 
@@ -692,14 +790,22 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     printf("RELOAD\n");
   }
 
+  RendererContext context =
+      (RendererContext){.state = state,
+                        .transient_arena = &transientState->arena,
+                        .renderer = buffer->renderer};
+  ;
+
   EditorFrame *editor_frame = &state->editor_frame;
   ExFrame *ex_frame = &state->ex_frame;
 
   const int16_t editor_frame_start_y = buffer->height * 0.01;
   const int16_t modeline_frame_start_y = buffer->height - state->font_h * 3;
   const int16_t ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
-  editor_frame->viewport_length =
+  editor_frame->viewport_v.size =
       (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
+  // TODO
+  editor_frame->viewport_h.size = 100;
 
   SDL_Event event;
   while (poll_event(input, &event)) {
@@ -717,13 +823,13 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             return 1;
           } else if (line_eq(ex_frame->line, "load")) {
             char *filename = "src/htext_app.c";
-            if (load_file(buffer->renderer, state, filename) != 0) {
+            if (load_file(context, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
           } else if (line_starts_with(ex_frame->line, "load ")) {
             ex_frame->line->text[ex_frame->line->size] = '\0';
             char *filename = ex_frame->line->text + 5;
-            if (load_file(buffer->renderer, state, filename) != 0) {
+            if (load_file(context, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
           } else if (line_starts_with(ex_frame->line, "dump ")) {
@@ -797,16 +903,17 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   // -------- rendering
   // render editor frame
   {
-    assert(editor_frame->viewport_start >= 0);
-    assert(editor_frame->viewport_start < editor_frame->line_count);
-    Line *start_line = editor_frame->index[editor_frame->viewport_start];
+    assert(editor_frame->viewport_v.start >= 0);
+    assert(editor_frame->viewport_h.start >= 0);
+    assert(editor_frame->viewport_v.start < editor_frame->line_count);
+    Line *start_line = editor_frame->index[editor_frame->viewport_v.start];
     assert(start_line != NULL);
     Line *end_line = NULL;
 
-    if ((editor_frame->viewport_start + editor_frame->viewport_length) <
+    if ((editor_frame->viewport_v.start + editor_frame->viewport_v.size) <
         editor_frame->line_count) {
-      end_line = editor_frame->index[editor_frame->viewport_start +
-                                     editor_frame->viewport_length];
+      end_line = editor_frame->index[editor_frame->viewport_v.start +
+                                     editor_frame->viewport_v.size];
     }
 
     int16_t x_start = buffer->width * 0.01;
@@ -815,8 +922,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.y = editor_frame_start_y;
     dest.h = state->font_h;
 
-    bool is_cursor_active = state->mode != AppMode_ex;
-    int16_t line_number = editor_frame->viewport_start;
+    int16_t line_number = editor_frame->viewport_v.start;
     SDL_Color color = {UNHEX(EDITOR_FONT_COLOR)};
     char line_number_str[6];
 
@@ -838,11 +944,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
       dest.x += dest.w + state->font_h;
 
-      render_line(state, buffer->renderer, line,
-                  line == editor_frame->cursor.line
-                      ? &editor_frame->cursor.column
-                      : NULL,
-                  dest.x, dest.y, is_cursor_active, color);
+      SDL_Point start = (SDL_Point){.x = dest.x, .y = dest.y};
+      editor_frame_render_line(context, line, start, color);
       dest.y += state->font_h;
       dest.x = x_start;
       line_number++;
@@ -905,9 +1008,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     dest.x += dest.w;
 
     SDL_Color color = {UNHEX(EX_FONT_COLOR)};
-    render_line(state, buffer->renderer, ex_frame->line,
-                &ex_frame->cursor_column, dest.x, dest.y,
-                state->mode == AppMode_ex, color);
+    SDL_Point start = (SDL_Point){.x = dest.x, .y = dest.y};
+    ex_frame_render_line(context, ex_frame->line, ex_frame->cursor_column,
+                         start, color);
   } else if (strlen(state->status_message) > 0) {
     int16_t x = 0.005 * buffer->width;
     SDL_Rect dest;
@@ -956,7 +1059,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     {
       sprintf(text, "Editor frame viewport start: %d, size:%d",
-              editor_frame->viewport_start, editor_frame->viewport_length);
+              editor_frame->viewport_v_start, editor_frame->viewport_v_size);
       SDL_Texture *texture = texture_from_text(
           buffer->debugRenderer, state->font, text, color, &dest.w);
       SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
