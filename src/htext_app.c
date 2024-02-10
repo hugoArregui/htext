@@ -266,7 +266,8 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
       state->mode = AppMode_insert;
     } break;
     case 'I': {
-      editor_frame->cursor.column = 0;
+      editor_frame_move_cursor_h(editor_frame,
+                                 -1 * editor_frame->cursor.column);
       state->mode = AppMode_insert;
     } break;
     case 'h': {
@@ -290,7 +291,8 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
                                                    editor_frame->cursor.column);
     } break;
     case 'A': {
-      editor_frame->cursor.column = editor_frame->cursor.line->size;
+      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->size -
+                                                   editor_frame->cursor.column);
       state->mode = AppMode_insert;
     } break;
     case 'G': {
