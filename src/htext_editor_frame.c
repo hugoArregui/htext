@@ -3,6 +3,8 @@
 // NOTE: defined before ths included, adding them here so emacs doesn't complain
 void line_invalidate_texture(Line *line);
 void line_insert_next(Line *line, Line *next_line);
+void line_insert_text(Line *line, int16_t *column, char *text,
+                      int16_t text_size);
 
 #if 1
 #define assert_editor_frame_integrity(editor_frame)                            \
@@ -267,4 +269,36 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
     editor_frame_delete_line(frame, line_to_remove);
   }
   editor_frame_reindex(frame);
+}
+
+// TODO rewrite to avoid moving the cursor and such
+int editor_frame_load_file(MemoryArena* arena, EditorFrame* editor_frame, char* filename) {
+  FILE *f = fopen(filename, "r");
+  if (!f) {
+    return -1;
+  }
+
+  editor_frame_clear(editor_frame);
+  assert_editor_frame_integrity(editor_frame);
+  assert(editor_frame->line_count == 1);
+
+  char c;
+  int16_t read_size = fread(&c, sizeof(char), 1, f);
+  while (read_size > 0) {
+    if (c == '\n') {
+      editor_frame_insert_new_line(arena, editor_frame);
+    } else {
+      assert(c >= 32);
+      line_insert_text(editor_frame->cursor.line,
+                       &editor_frame->cursor.column, &c, 1);
+    }
+    read_size = fread(&c, sizeof(char), 1, f);
+  }
+  fclose(f);
+
+  static int16_t column = 0;
+  editor_frame_cursor_reset(editor_frame, &column);
+  editor_frame_reindex(editor_frame);
+
+  return 0;
 }
