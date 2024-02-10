@@ -391,7 +391,7 @@ int16_t load_file(RendererContext context, char *filename) {
   editor_frame_cursor_reset(&state->editor_frame, &column);
   editor_frame_reindex(&state->editor_frame);
 
-  // TODO: reuse string if already is reserved
+  // TODO(leak): reuse string if already is reserved
   state->filename = pushString(&state->arena, filename);
 
   SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
