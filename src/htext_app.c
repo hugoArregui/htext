@@ -690,10 +690,6 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   state->mode = AppMode_normal;
 
   state->font = TTF_cpointer(TTF_OpenFont("IosevkaNerdFont-Regular.ttf", 20));
-  /* state->font = TTF_cpointer( */
-  /*     TTF_OpenFont("/usr/share/fonts/TTF/IosevkaNerdFont-Regular.ttf", 20));
-   */
-
   state->font_h = TTF_FontHeight(state->font);
 
   SDL_Color sdlFontColor = {UNHEX(EDITOR_FONT_COLOR)};
