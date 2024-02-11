@@ -22,11 +22,19 @@
 
 #define EX_FONT_COLOR 0xFFFFFF00
 
-Line *line_create(MemoryArena *arena) {
-  Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
-  line->max_size = 200;
+#define TEXT_LINE_BUFFER_SIZE 100
+
+TextLineBuffer *text_line_buffer_create(MemoryArena *arena) {
+  TextLineBuffer *buffer = pushStruct(arena, TextLineBuffer, DEFAULT_ALIGMENT);
+  buffer->next = NULL;
+  buffer->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT);
+  return buffer;
+}
+
+Line *line_create(State *state) {
+  Line *line = pushStruct(&state->arena, Line, DEFAULT_ALIGMENT);
   line->size = 0;
-  line->text = (char *)pushSize(arena, line->max_size, DEFAULT_ALIGMENT);
+  line->text = text_line_buffer_create(&state->arena); // TODO
   line->prev = NULL;
   line->next = NULL;
   line->texture = NULL;
@@ -42,10 +50,9 @@ void line_invalidate_texture(Line *line) {
 
 void line_insert_text(Line *line, int16_t *column, char *text,
                       int16_t text_size) {
-  assert(line->max_size >= (line->size + text_size));
-  memcpy(line->text + *column + text_size, line->text + *column,
-         line->size - *column);
-  memcpy(line->text + *column, text, text_size);
+  strncpy(line->text->text + *column + text_size, line->text->text + *column,
+          line->size - *column);
+  strncpy(line->text->text + *column, text, text_size);
   line_invalidate_texture(line);
   line->size += text_size;
   *column += text_size;
@@ -64,17 +71,8 @@ void line_insert_next(Line *line, Line *next_line) {
   line->next = next_line;
 }
 
-bool line_eq(Line *line, char *str) {
-  return ((int16_t)strlen(str)) == line->size &&
-         strncmp(line->text, str, line->size) == 0;
-}
-
-bool line_starts_with(Line *line, char *str) {
-  int16_t len = strlen(str);
-  return line->size >= len && strncmp(line->text, str, len) == 0;
-}
-
 #include "htext_editor_frame.c"
+#include "htext_ex_frame.c"
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
                                char *text, SDL_Color color, int32_t *w) {
@@ -112,7 +110,7 @@ void editor_frame_render_line(RendererContext context, Line *line,
   if (line == frame->cursor.line) {
     int16_t cursor_x = dest.x;
     for (int16_t i = 0; i < cursor_column - viewport_h.start; ++i) {
-      cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
+      cursor_x += state->glyph_width[line->text->text[i] - ASCII_LOW];
     }
 
     SDL_Rect cursorDest;
@@ -140,7 +138,8 @@ void editor_frame_render_line(RendererContext context, Line *line,
       }
       char *str_to_render = pushSize(context.transient_arena,
                                      str_to_render_size + 1, DEFAULT_ALIGMENT);
-      memcpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
+      strncpy(str_to_render, line->text->text + viewport_h.start,
+              str_to_render_size);
       str_to_render[str_to_render_size] = '\0';
 
       line->texture =
@@ -157,10 +156,10 @@ void editor_frame_render_line(RendererContext context, Line *line,
   dest.x = start.x;
 }
 
-void ex_frame_render_line(RendererContext context, Line *line,
-                          int16_t cursor_column, SDL_Point start,
+void ex_frame_render_line(RendererContext context, SDL_Point start,
                           SDL_Color color) {
   State *state = context.state;
+  ExFrame *frame = &state->ex_frame;
   const int16_t cursor_w = state->font_h / 2;
 
   SDL_Rect dest;
@@ -169,8 +168,8 @@ void ex_frame_render_line(RendererContext context, Line *line,
   dest.h = state->font_h;
 
   int16_t cursor_x = dest.x;
-  for (int16_t i = 0; i < cursor_column; ++i) {
-    cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
+  for (int16_t i = 0; i < frame->cursor_column; ++i) {
+    cursor_x += state->glyph_width[frame->text[i] - ASCII_LOW];
   }
 
   SDL_Rect cursorDest;
@@ -182,33 +181,21 @@ void ex_frame_render_line(RendererContext context, Line *line,
   SDL_ccode(SDL_SetRenderDrawColor(context.renderer, UNHEX(CURSOR_COLOR)));
   SDL_ccode(SDL_RenderFillRect(context.renderer, &cursorDest));
 
-  if (line->size > 0) {
-    if (line->texture == NULL) {
-      line->text[line->size] = '\0';
-      line->texture =
-          texture_from_text(context.renderer, state->font, line->text, color,
-                            &line->texture_width);
+  if (frame->size > 0) {
+    if (frame->texture == NULL) {
+      frame->text[frame->size] = '\0';
+      frame->texture =
+          texture_from_text(context.renderer, state->font, frame->text, color,
+                            &frame->texture_width);
     }
-    if (line->texture != NULL) {
-      dest.w = line->texture_width;
-      SDL_ccode(SDL_RenderCopy(context.renderer, line->texture, NULL, &dest));
+    if (frame->texture != NULL) {
+      dest.w = frame->texture_width;
+      SDL_ccode(SDL_RenderCopy(context.renderer, frame->texture, NULL, &dest));
     }
   }
 
   dest.y += state->font_h;
   dest.x = start.x;
-}
-
-void ex_frame_remove_char(ExFrame *frame) {
-  if (frame->cursor_column > 0) {
-    assert(frame->cursor_column <= frame->line->size);
-    memcpy(frame->line->text + frame->cursor_column,
-           frame->line->text + frame->cursor_column + 1,
-           frame->line->size - frame->cursor_column);
-    frame->line->size--;
-    frame->cursor_column--;
-    line_invalidate_texture(frame->line);
-  }
 }
 
 #if DEBUG_PLAYBACK == PLAYBACK_RECORDING
@@ -259,7 +246,7 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
     switch (operator[0]) {
     case ':': {
       state->mode = AppMode_ex;
-      ex_frame->line->size = 0;
+      ex_frame->size = 0;
       ex_frame->cursor_column = 0;
     } break;
     case 'i': {
@@ -364,7 +351,7 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
 
-  int r = editor_frame_load_file(&state->arena, &state->editor_frame, filename);
+  int r = editor_frame_load_file(state, &state->editor_frame, filename);
   if (r < 0) {
     return r;
   }
@@ -431,7 +418,7 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
                   (uint8_t *)memory->permanentStorage + sizeof(State));
 
   {
-    Line *line = line_create(&state->arena);
+    Line *line = line_create(state);
     state->editor_frame =
         (EditorFrame){.line = line,
                       .cursor = (Cursor){.line = line, .column = 0},
@@ -441,8 +428,10 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
     editor_frame_reindex(&state->editor_frame);
   }
 
-  state->ex_frame =
-      (ExFrame){.line = line_create(&state->arena), .cursor_column = 0};
+  state->ex_frame = (ExFrame){
+      .size = 0, .max_size = 200, .cursor_column = 0, .texture = NULL};
+  state->ex_frame.text =
+      pushSize(&state->arena, state->ex_frame.max_size, DEFAULT_ALIGMENT);
 
   SDL_Color modeColor = {UNHEX(MODELINE_FONT_COLOR)};
   state->appModeTextures[AppMode_ex] =
@@ -531,46 +520,50 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           state->mode = AppMode_normal;
 
-          if (line_eq(ex_frame->line, "quit") || line_eq(ex_frame->line, "q")) {
+          if ((ex_frame->size == 4 &&
+               strncmp(ex_frame->text, "quit", 4) == 0) ||
+              (ex_frame->size == 1 && strncmp(ex_frame->text, "q", 1) == 0)) {
             state_destroy(state);
             return 1;
-          } else if (line_eq(ex_frame->line, "load")) {
+          } else if ((ex_frame->size == 4 &&
+                      strncmp(ex_frame->text, "load", 4) == 0)) {
             char *filename = "src/htext_app.c";
             if (load_file(context, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
-          } else if (line_starts_with(ex_frame->line, "load ")) {
-            ex_frame->line->text[ex_frame->line->size] = '\0';
-            char *filename = ex_frame->line->text + 5;
+          } else if (strncmp(ex_frame->text, "load ", 5) == 0) {
+            ex_frame->text[ex_frame->size] = '\0';
+            char *filename = ex_frame->text + 5;
             if (load_file(context, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }
-          } else if (line_starts_with(ex_frame->line, "dump ")) {
-            ex_frame->line->text[ex_frame->line->size] = '\0';
-            char *filename = ex_frame->line->text + 5;
+          } else if (strncmp(ex_frame->text, "dump ", 5) == 0) {
+            ex_frame->text[ex_frame->size] = '\0';
+            char *filename = ex_frame->text + 5;
             if (dump_file(state, filename) == 0) {
               sprintf(state->status_message, "Wrote to %s", filename);
             } else {
               sprintf(state->status_message, "Cannot write to %s", filename);
             }
-          } else if (line_eq(ex_frame->line, "clear")) {
+          } else if (ex_frame->size == 4 &&
+                     strncmp(ex_frame->text, "clear", 5) == 0) {
             editor_frame_clear(editor_frame);
-          } else if (strlen(ex_frame->line->text) > 0) {
+          } else if (strlen(ex_frame->text) > 0) {
             sprintf(state->status_message, "Unrecognized command: %s",
-                    ex_frame->line->text);
+                    ex_frame->text);
           }
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           ex_frame_remove_char(ex_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
-          ex_frame->line->size = 0;
+          ex_frame->size = 0;
           ex_frame->cursor_column = 0;
         }
         assert_editor_frame_integrity(&state->editor_frame);
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          editor_frame_insert_new_line(&state->arena, editor_frame);
+          editor_frame_insert_new_line(state, editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           editor_frame_remove_char(editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -593,8 +586,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_ex: {
         int16_t text_size = strlen(event.text.text);
-        line_insert_text(ex_frame->line, &ex_frame->cursor_column,
-                         event.text.text, text_size);
+        ex_frame_insert_text(ex_frame, event.text.text, text_size);
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
@@ -707,8 +699,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   if (state->mode == AppMode_ex) {
-    assert(ex_frame->line->next == NULL);
-
     int16_t x = 0.005 * buffer->width;
 
     SDL_Rect dest;
@@ -722,8 +712,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     SDL_Color color = {UNHEX(EX_FONT_COLOR)};
     SDL_Point start = (SDL_Point){.x = dest.x, .y = dest.y};
-    ex_frame_render_line(context, ex_frame->line, ex_frame->cursor_column,
-                         start, color);
+    ex_frame_render_line(context, start, color);
   } else if (strlen(state->status_message) > 0) {
     int16_t x = 0.005 * buffer->width;
     SDL_Rect dest;
