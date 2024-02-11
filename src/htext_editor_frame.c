@@ -1,6 +1,7 @@
 #include "htext_app.h"
 
 // NOTE: defined before ths included, adding them here so emacs doesn't complain
+Line *line_create(State *state);
 void line_invalidate_texture(Line *line);
 void line_insert_next(Line *line, Line *next_line);
 void line_insert_text(Line *line, int16_t *column, char *text,
@@ -26,14 +27,13 @@ void _assert_editor_frame_integrity(EditorFrame *frame, char *file,
     my_assert(line->prev != line, file, linenum);
     my_assert(line->next != line, file, linenum);
     my_assert(line->prev == prev_line, file, linenum);
-    my_assert(line->max_size > 0, file, linenum);
 
     if (line == frame->cursor.line) {
       my_assert(line_num == frame->cursor.line_num, file, linenum)
     }
 
     for (int16_t i = 0; i < line->size; ++i) {
-      my_assert(line->text[i] >= 32, file, linenum);
+      my_assert(line->text->text[i] >= 32, file, linenum);
     }
     prev_line = line;
     line_num++;
@@ -43,7 +43,6 @@ void _assert_editor_frame_integrity(EditorFrame *frame, char *file,
 
   for (Line *line = frame->deleted_line; line != NULL; line = line->next) {
     my_assert(line->texture == NULL, file, linenum);
-    my_assert(line->max_size > 0, file, linenum);
   }
 }
 #else
@@ -202,8 +201,6 @@ void editor_frame_remove_char(EditorFrame *frame) {
 
       if (line_to_remove->size > 0) {
         // we need to join line_to_remove with prev cursor line
-        assert(frame->cursor.line->max_size >=
-               (frame->cursor.line->size + line_to_remove->size));
         memcpy(frame->cursor.line->text + frame->cursor.line->size,
                line_to_remove->text, line_to_remove->size);
         frame->cursor.line->size += line_to_remove->size;
@@ -223,16 +220,13 @@ void editor_frame_remove_char(EditorFrame *frame) {
   line_invalidate_texture(frame->cursor.line);
 }
 
-void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
+void editor_frame_insert_new_line(State* state, EditorFrame *frame) {
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
     frame->deleted_line = frame->deleted_line->next;
   } else {
-    new_line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
-    new_line->max_size = 200;
-    new_line->text =
-        (char *)pushSize(arena, new_line->max_size, DEFAULT_ALIGMENT);
+    new_line = line_create(state);
   }
 
   if (frame->cursor.column < frame->cursor.line->size) {
@@ -272,7 +266,7 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
 }
 
 // TODO rewrite to avoid moving the cursor and such
-int editor_frame_load_file(MemoryArena* arena, EditorFrame* editor_frame, char* filename) {
+int editor_frame_load_file(State* state, EditorFrame* editor_frame, char* filename) {
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
@@ -286,7 +280,7 @@ int editor_frame_load_file(MemoryArena* arena, EditorFrame* editor_frame, char* 
   int16_t read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      editor_frame_insert_new_line(arena, editor_frame);
+      editor_frame_insert_new_line(state, editor_frame);
     } else {
       assert(c >= 32);
       line_insert_text(editor_frame->cursor.line,
@@ -296,7 +290,7 @@ int editor_frame_load_file(MemoryArena* arena, EditorFrame* editor_frame, char* 
   }
   fclose(f);
 
-  static int16_t column = 0;
+  int16_t column = 0;
   editor_frame_cursor_reset(editor_frame, &column);
   editor_frame_reindex(editor_frame);
 
