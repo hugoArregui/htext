@@ -1,11 +1,56 @@
 #include "htext_app.h"
 
-// NOTE: defined before ths included, adding them here so emacs doesn't complain
-Line *line_create(State *state);
-void line_invalidate_texture(Line *line);
-void line_insert_next(Line *line, Line *next_line);
-void line_insert_text(Line *line, int16_t *column, char *text,
-                      int16_t text_size);
+#define TEXT_LINE_BUFFER_SIZE 200
+
+/* static TextLineBuffer *text_line_buffer_create(MemoryArena *arena) { */
+/*   TextLineBuffer *buffer = pushStruct(arena, TextLineBuffer,
+ * DEFAULT_ALIGMENT); */
+/*   buffer->next = NULL; */
+/*   buffer->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT); */
+/*   return buffer; */
+/* } */
+
+static Line *line_create(MemoryArena *arena) {
+  Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
+  line->size = 0;
+  line->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT);
+  line->prev = NULL;
+  line->next = NULL;
+  line->texture = NULL;
+  return line;
+}
+
+static void line_invalidate_texture(Line *line) {
+  if (line->texture != NULL) {
+    SDL_DestroyTexture(line->texture);
+    line->texture = NULL;
+  }
+}
+
+static void line_insert_text(Line *line, int16_t *column, char *text,
+                             int16_t text_size) {
+  assert(text_size > 0);
+  assert(line->size + text_size < TEXT_LINE_BUFFER_SIZE);
+  strncpy(line->text + *column + text_size, line->text + *column,
+          line->size - *column);
+  strncpy(line->text + *column, text, text_size);
+  line_invalidate_texture(line);
+  line->size += text_size;
+  *column += text_size;
+}
+
+static void line_insert_next(Line *line, Line *next_line) {
+  assert(line != NULL);
+  assert(next_line != NULL);
+  assert(line != next_line);
+
+  next_line->next = line->next;
+  next_line->prev = line;
+  if (next_line->next != NULL) {
+    next_line->next->prev = next_line;
+  }
+  line->next = next_line;
+}
 
 #if 1
 #define assert_editor_frame_integrity(editor_frame)                            \
@@ -33,7 +78,7 @@ void _assert_editor_frame_integrity(EditorFrame *frame, char *file,
     }
 
     for (int16_t i = 0; i < line->size; ++i) {
-      my_assert(line->text->text[i] >= 32, file, linenum);
+      my_assert(line->text[i] >= 32, file, linenum);
     }
     prev_line = line;
     line_num++;
@@ -220,13 +265,13 @@ void editor_frame_remove_char(EditorFrame *frame) {
   line_invalidate_texture(frame->cursor.line);
 }
 
-void editor_frame_insert_new_line(State* state, EditorFrame *frame) {
+void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
     frame->deleted_line = frame->deleted_line->next;
   } else {
-    new_line = line_create(state);
+    new_line = line_create(arena);
   }
 
   if (frame->cursor.column < frame->cursor.line->size) {
@@ -265,8 +310,13 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
   editor_frame_reindex(frame);
 }
 
+void editor_frame_insert_text(EditorFrame *frame, char *text, int16_t size) {
+  line_insert_text(frame->cursor.line, &frame->cursor.column, text, size);
+}
+
 // TODO rewrite to avoid moving the cursor and such
-int editor_frame_load_file(State* state, EditorFrame* editor_frame, char* filename) {
+int editor_frame_load_file(MemoryArena *arena, EditorFrame *editor_frame,
+                           char *filename) {
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
@@ -280,11 +330,11 @@ int editor_frame_load_file(State* state, EditorFrame* editor_frame, char* filena
   int16_t read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      editor_frame_insert_new_line(state, editor_frame);
+      editor_frame_insert_new_line(arena, editor_frame);
     } else {
       assert(c >= 32);
-      line_insert_text(editor_frame->cursor.line,
-                       &editor_frame->cursor.column, &c, 1);
+      line_insert_text(editor_frame->cursor.line, &editor_frame->cursor.column,
+                       &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
@@ -293,6 +343,19 @@ int editor_frame_load_file(State* state, EditorFrame* editor_frame, char* filena
   int16_t column = 0;
   editor_frame_cursor_reset(editor_frame, &column);
   editor_frame_reindex(editor_frame);
+  assert_editor_frame_integrity(editor_frame);
 
   return 0;
+}
+
+EditorFrame editor_frame_create(MemoryArena *arena) {
+  Line *line = line_create(arena);
+  EditorFrame editor_frame =
+      (EditorFrame){.line = line,
+                    .cursor = (Cursor){.line = line, .column = 0},
+                    .line_count = 1,
+                    .viewport_v.start = 0,
+                    .viewport_h.start = 0};
+  editor_frame_reindex(&editor_frame);
+  return editor_frame;
 }

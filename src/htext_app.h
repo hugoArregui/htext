@@ -116,18 +116,17 @@ typedef struct {
   int32_t w;
 } CachedTexture;
 
+/* struct TextLineBuffer; */
 
-struct TextLineBuffer;
-
-typedef struct {
-  char *text;
-  struct TextLineBuffer *next;
-} TextLineBuffer;
+/* typedef struct { */
+/*   char *text; */
+/*   struct TextLineBuffer *next; */
+/* } TextLineBuffer; */
 
 struct Line;
 
 typedef struct Line {
-  TextLineBuffer *text;
+  char *text;
   int16_t size;
   struct Line *prev;
   struct Line *next;
@@ -164,11 +163,11 @@ typedef struct {
 } EditorFrame;
 
 typedef struct {
-  char* text;
+  char *text;
   int16_t size;
   int16_t max_size;
   int16_t cursor_column;
-  SDL_Texture* texture;
+  SDL_Texture *texture;
   int32_t texture_width;
 } ExFrame;
 

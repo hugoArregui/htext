@@ -22,55 +22,6 @@
 
 #define EX_FONT_COLOR 0xFFFFFF00
 
-#define TEXT_LINE_BUFFER_SIZE 100
-
-TextLineBuffer *text_line_buffer_create(MemoryArena *arena) {
-  TextLineBuffer *buffer = pushStruct(arena, TextLineBuffer, DEFAULT_ALIGMENT);
-  buffer->next = NULL;
-  buffer->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT);
-  return buffer;
-}
-
-Line *line_create(State *state) {
-  Line *line = pushStruct(&state->arena, Line, DEFAULT_ALIGMENT);
-  line->size = 0;
-  line->text = text_line_buffer_create(&state->arena); // TODO
-  line->prev = NULL;
-  line->next = NULL;
-  line->texture = NULL;
-  return line;
-}
-
-void line_invalidate_texture(Line *line) {
-  if (line->texture != NULL) {
-    SDL_DestroyTexture(line->texture);
-    line->texture = NULL;
-  }
-}
-
-void line_insert_text(Line *line, int16_t *column, char *text,
-                      int16_t text_size) {
-  strncpy(line->text->text + *column + text_size, line->text->text + *column,
-          line->size - *column);
-  strncpy(line->text->text + *column, text, text_size);
-  line_invalidate_texture(line);
-  line->size += text_size;
-  *column += text_size;
-}
-
-void line_insert_next(Line *line, Line *next_line) {
-  assert(line != NULL);
-  assert(next_line != NULL);
-  assert(line != next_line);
-
-  next_line->next = line->next;
-  next_line->prev = line;
-  if (next_line->next != NULL) {
-    next_line->next->prev = next_line;
-  }
-  line->next = next_line;
-}
-
 #include "htext_editor_frame.c"
 #include "htext_ex_frame.c"
 
@@ -110,7 +61,7 @@ void editor_frame_render_line(RendererContext context, Line *line,
   if (line == frame->cursor.line) {
     int16_t cursor_x = dest.x;
     for (int16_t i = 0; i < cursor_column - viewport_h.start; ++i) {
-      cursor_x += state->glyph_width[line->text->text[i] - ASCII_LOW];
+      cursor_x += state->glyph_width[line->text[i] - ASCII_LOW];
     }
 
     SDL_Rect cursorDest;
@@ -138,8 +89,7 @@ void editor_frame_render_line(RendererContext context, Line *line,
       }
       char *str_to_render = pushSize(context.transient_arena,
                                      str_to_render_size + 1, DEFAULT_ALIGMENT);
-      strncpy(str_to_render, line->text->text + viewport_h.start,
-              str_to_render_size);
+      strncpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
       str_to_render[str_to_render_size] = '\0';
 
       line->texture =
@@ -351,7 +301,7 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
 
-  int r = editor_frame_load_file(state, &state->editor_frame, filename);
+  int r = editor_frame_load_file(&state->arena, &state->editor_frame, filename);
   if (r < 0) {
     return r;
   }
@@ -417,21 +367,8 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
                   (uint8_t *)memory->permanentStorage + sizeof(State));
 
-  {
-    Line *line = line_create(state);
-    state->editor_frame =
-        (EditorFrame){.line = line,
-                      .cursor = (Cursor){.line = line, .column = 0},
-                      .line_count = 1,
-                      .viewport_v.start = 0,
-                      .viewport_h.start = 0};
-    editor_frame_reindex(&state->editor_frame);
-  }
-
-  state->ex_frame = (ExFrame){
-      .size = 0, .max_size = 200, .cursor_column = 0, .texture = NULL};
-  state->ex_frame.text =
-      pushSize(&state->arena, state->ex_frame.max_size, DEFAULT_ALIGMENT);
+  state->editor_frame = editor_frame_create(&state->arena);
+  state->ex_frame = ex_frame_create(&state->arena);
 
   SDL_Color modeColor = {UNHEX(MODELINE_FONT_COLOR)};
   state->appModeTextures[AppMode_ex] =
@@ -519,7 +456,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       case AppMode_ex:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
           state->mode = AppMode_normal;
-
           if ((ex_frame->size == 4 &&
                strncmp(ex_frame->text, "quit", 4) == 0) ||
               (ex_frame->size == 1 && strncmp(ex_frame->text, "q", 1) == 0)) {
@@ -563,7 +499,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          editor_frame_insert_new_line(state, editor_frame);
+          editor_frame_insert_new_line(&state->arena, editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           editor_frame_remove_char(editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -586,13 +522,13 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_ex: {
         int16_t text_size = strlen(event.text.text);
+        assert_editor_frame_integrity(editor_frame);
         ex_frame_insert_text(ex_frame, event.text.text, text_size);
+        assert_editor_frame_integrity(editor_frame);
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
-        line_insert_text(editor_frame->cursor.line,
-                         &editor_frame->cursor.column, event.text.text,
-                         text_size);
+        editor_frame_insert_text(editor_frame, event.text.text, text_size);
       } break;
       default:
         assert(false);
