@@ -463,7 +463,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             return 1;
           } else if ((ex_frame->size == 4 &&
                       strncmp(ex_frame->text, "load", 4) == 0)) {
-            char *filename = "src/htext_app.c";
+            char *filename = "data";
             if (load_file(context, filename) != 0) {
               sprintf(state->status_message, "Cannot open %s", filename);
             }

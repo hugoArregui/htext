@@ -1,19 +1,13 @@
 #include "htext_app.h"
+#include <sys/stat.h>
 
-#define TEXT_LINE_BUFFER_SIZE 200
-
-/* static TextLineBuffer *text_line_buffer_create(MemoryArena *arena) { */
-/*   TextLineBuffer *buffer = pushStruct(arena, TextLineBuffer,
- * DEFAULT_ALIGMENT); */
-/*   buffer->next = NULL; */
-/*   buffer->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT); */
-/*   return buffer; */
-/* } */
+#define TEXT_LINE_BUFFER_SIZE 100
 
 static Line *line_create(MemoryArena *arena) {
   Line *line = pushStruct(arena, Line, DEFAULT_ALIGMENT);
   line->size = 0;
   line->text = pushSize(arena, TEXT_LINE_BUFFER_SIZE, DEFAULT_ALIGMENT);
+  line->max_size = TEXT_LINE_BUFFER_SIZE;
   line->prev = NULL;
   line->next = NULL;
   line->texture = NULL;
@@ -25,18 +19,6 @@ static void line_invalidate_texture(Line *line) {
     SDL_DestroyTexture(line->texture);
     line->texture = NULL;
   }
-}
-
-static void line_insert_text(Line *line, int16_t *column, char *text,
-                             int16_t text_size) {
-  assert(text_size > 0);
-  assert(line->size + text_size < TEXT_LINE_BUFFER_SIZE);
-  strncpy(line->text + *column + text_size, line->text + *column,
-          line->size - *column);
-  strncpy(line->text + *column, text, text_size);
-  line_invalidate_texture(line);
-  line->size += text_size;
-  *column += text_size;
 }
 
 static void line_insert_next(Line *line, Line *next_line) {
@@ -105,14 +87,12 @@ void editor_frame_reindex(EditorFrame *frame) {
   assert(i == frame->line_count);
 }
 
-void editor_frame_cursor_reset(EditorFrame *frame, int16_t *column) {
+void editor_frame_cursor_reset(EditorFrame *frame) {
   frame->viewport_v.start = 0;
   frame->viewport_h.start = 0;
   frame->cursor.line_num = 0;
   frame->cursor.line = frame->line;
-  if (column != NULL) {
-    frame->cursor.column = *column;
-  }
+  frame->cursor.column = 0;
 }
 
 void editor_frame_update_viewport(EditorFrame *frame) {
@@ -226,8 +206,7 @@ void editor_frame_clear(EditorFrame *frame) {
   while (frame->line->next != NULL) {
     editor_frame_delete_line(frame, frame->line->next);
   }
-  static int16_t new_column = 0;
-  editor_frame_cursor_reset(frame, &new_column);
+  editor_frame_cursor_reset(frame);
   frame->cursor.line->next = NULL;
   frame->line->size = 0;
   frame->line_count = 1;
@@ -246,8 +225,8 @@ void editor_frame_remove_char(EditorFrame *frame) {
 
       if (line_to_remove->size > 0) {
         // we need to join line_to_remove with prev cursor line
-        memcpy(frame->cursor.line->text + frame->cursor.line->size,
-               line_to_remove->text, line_to_remove->size);
+        strncpy(frame->cursor.line->text + frame->cursor.line->size,
+                line_to_remove->text, line_to_remove->size);
         frame->cursor.line->size += line_to_remove->size;
       }
 
@@ -255,9 +234,9 @@ void editor_frame_remove_char(EditorFrame *frame) {
     }
   } else {
     assert(frame->cursor.column <= frame->cursor.line->size);
-    memcpy(frame->cursor.line->text + frame->cursor.column - 1,
-           frame->cursor.line->text + frame->cursor.column,
-           frame->cursor.line->size - frame->cursor.column);
+    strncpy(frame->cursor.line->text + frame->cursor.column - 1,
+            frame->cursor.line->text + frame->cursor.column,
+            frame->cursor.line->size - frame->cursor.column);
     frame->cursor.line->size--;
     frame->cursor.column--;
   }
@@ -276,8 +255,8 @@ void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
 
   if (frame->cursor.column < frame->cursor.line->size) {
     new_line->size = frame->cursor.line->size - frame->cursor.column;
-    memcpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
-           new_line->size);
+    strncpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
+            new_line->size);
     line_invalidate_texture(frame->cursor.line);
     frame->cursor.line->size = frame->cursor.column;
   } else {
@@ -310,8 +289,18 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
   editor_frame_reindex(frame);
 }
 
-void editor_frame_insert_text(EditorFrame *frame, char *text, int16_t size) {
-  line_insert_text(frame->cursor.line, &frame->cursor.column, text, size);
+void editor_frame_insert_text(EditorFrame *frame, char *text,
+                              int16_t text_size) {
+  assert(text_size > 0);
+
+  Line *line = frame->cursor.line;
+  int16_t column = frame->cursor.column;
+  strncpy(line->text + column + text_size, line->text + column,
+          line->size - column);
+  strncpy(line->text + column, text, text_size);
+  line_invalidate_texture(line);
+  line->size += text_size;
+  frame->cursor.column += text_size;
 }
 
 // TODO rewrite to avoid moving the cursor and such
@@ -333,15 +322,13 @@ int editor_frame_load_file(MemoryArena *arena, EditorFrame *editor_frame,
       editor_frame_insert_new_line(arena, editor_frame);
     } else {
       assert(c >= 32);
-      line_insert_text(editor_frame->cursor.line, &editor_frame->cursor.column,
-                       &c, 1);
+      editor_frame_insert_text(editor_frame, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
   fclose(f);
 
-  int16_t column = 0;
-  editor_frame_cursor_reset(editor_frame, &column);
+  editor_frame_cursor_reset(editor_frame);
   editor_frame_reindex(editor_frame);
   assert_editor_frame_integrity(editor_frame);
 
