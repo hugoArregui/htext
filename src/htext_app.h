@@ -116,18 +116,12 @@ typedef struct {
   int32_t w;
 } CachedTexture;
 
-/* struct TextLineBuffer; */
-
-/* typedef struct { */
-/*   char *text; */
-/*   struct TextLineBuffer *next; */
-/* } TextLineBuffer; */
-
 struct Line;
 
 typedef struct Line {
   char *text;
   int16_t size;
+  int16_t max_size;
   struct Line *prev;
   struct Line *next;
 
