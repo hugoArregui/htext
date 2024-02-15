@@ -80,15 +80,15 @@ void editor_frame_render_line(RendererContext context, Line *line,
     }
   }
 
-  if (line->size > 0) {
-    bool should_render_line = line->size > viewport_h.start;
+  if (line->len > 0) {
+    bool should_render_line = line->len > viewport_h.start;
     if (line->texture == NULL && should_render_line) {
-      int str_to_render_size = line->size - viewport_h.start;
+      int str_to_render_size = line->len - viewport_h.start;
       if (str_to_render_size > viewport_h.size) {
         str_to_render_size = viewport_h.size;
       }
       char *str_to_render = pushSize(context.transient_arena,
-                                     str_to_render_size + 1, DEFAULT_ALIGMENT);
+                                     str_to_render_size + 1, DEFAULT_ALIGNMENT);
       strncpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
       str_to_render[str_to_render_size] = '\0';
 
@@ -224,11 +224,11 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
                                  -1 * editor_frame->cursor.column);
     } break;
     case 'L': {
-      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->size -
+      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->len -
                                                    editor_frame->cursor.column);
     } break;
     case 'A': {
-      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->size -
+      editor_frame_move_cursor_h(editor_frame, editor_frame->cursor.line->len -
                                                    editor_frame->cursor.column);
       state->mode = AppMode_insert;
     } break;
@@ -301,7 +301,8 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
 
-  int r = editor_frame_load_file(&state->arena, &state->editor_frame, filename);
+  int r = editor_frame_load_file(
+                                 &state->arena, context.transient_arena, &state->editor_frame, filename);
   if (r < 0) {
     return r;
   }
@@ -331,7 +332,7 @@ int16_t dump_file(State *state, char *filename) {
   char new_line = '\n';
 
   for (Line *line = editor_frame->line; line != NULL; line = line->next) {
-    fwrite(line->text, line->size, 1, f);
+    fwrite(line->text, line->len, 1, f);
     fwrite(&new_line, 1, 1, f);
   }
 
@@ -415,14 +416,14 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   // NOTE(casey): Transient initialization
   assert(sizeof(TransientState) <= memory->transientStorageSize);
-  TransientState *transientState = (TransientState *)memory->transientStorage;
-  if (!transientState->isInitialized) {
-    initializeArena(&transientState->arena,
+  TransientState *transient_arena = (TransientState *)memory->transientStorage;
+  if (!transient_arena->is_initialized) {
+    initializeArena(&transient_arena->arena,
                     memory->transientStorageSize - sizeof(TransientState),
                     (uint8_t *)memory->transientStorage +
                         sizeof(TransientState));
 
-    transientState->isInitialized = true;
+    transient_arena->is_initialized = true;
   }
 
   if (input->executableReloaded) {
@@ -431,7 +432,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
   RendererContext context =
       (RendererContext){.state = state,
-                        .transient_arena = &transientState->arena,
+                        .transient_arena = &transient_arena->arena,
                         .renderer = buffer->renderer};
   ;
 
@@ -443,7 +444,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   const int16_t ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
   editor_frame->viewport_v.size =
       (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
-  // TODO
   editor_frame->viewport_h.size = 100;
 
   SDL_Event event;
@@ -528,7 +528,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
-        editor_frame_insert_text(editor_frame, event.text.text, text_size);
+        editor_frame_insert_text(&state->arena, &transient_arena->arena, editor_frame, event.text.text, text_size);
       } break;
       default:
         assert(false);
