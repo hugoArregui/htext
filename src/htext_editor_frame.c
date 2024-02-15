@@ -252,7 +252,7 @@ void editor_frame_remove_char(EditorFrame *frame) {
             frame->cursor.line->text + frame->cursor.column,
             frame->cursor.line->len - frame->cursor.column);
     frame->cursor.line->len--;
-    frame->cursor.column--;
+    editor_frame_move_cursor_h(frame, -1);
   }
 
   line_invalidate_texture(frame->cursor.line);
@@ -336,7 +336,7 @@ void editor_frame_insert_text(MemoryArena *transient_arena, EditorFrame *frame,
   line_invalidate_texture(line);
   line->len += text_size;
   frame->line->text[frame->line->len] = 0;
-  frame->cursor.column += text_size;
+  editor_frame_move_cursor_h(frame, text_size);
 
   assert_editor_frame_integrity(frame);
 }
