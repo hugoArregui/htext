@@ -27,7 +27,6 @@
 
 SDL_Texture *texture_from_text(SDL_Renderer *renderer, TTF_Font *font,
                                char *text, SDL_Color color, int32_t *w) {
-
   SDL_Surface *surface = TTF_cpointer(TTF_RenderText_Solid(font, text, color));
   if (w != NULL) {
     *w = surface->w;
@@ -301,8 +300,8 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
 
-  int r = editor_frame_load_file(
-                                 &state->arena, context.transient_arena, &state->editor_frame, filename);
+  int r = editor_frame_load_file(&state->arena, context.transient_arena,
+                                 &state->editor_frame, filename);
   if (r < 0) {
     return r;
   }
@@ -484,6 +483,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           } else if (ex_frame->size == 4 &&
                      strncmp(ex_frame->text, "clear", 5) == 0) {
             editor_frame_clear(editor_frame);
+          } else if (ex_frame->size == 10 &&
+                     strncmp(ex_frame->text, "invalidate", 10) == 0) {
+            editor_frame_invalidate_viewport_textures(editor_frame);
           } else if (strlen(ex_frame->text) > 0) {
             sprintf(state->status_message, "Unrecognized command: %s",
                     ex_frame->text);
@@ -528,7 +530,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
-        editor_frame_insert_text(&state->arena, &transient_arena->arena, editor_frame, event.text.text, text_size);
+        editor_frame_insert_text(&state->arena, &transient_arena->arena,
+                                 editor_frame, event.text.text, text_size);
       } break;
       default:
         assert(false);

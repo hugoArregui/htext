@@ -7,7 +7,7 @@ static Line *line_create(MemoryArena *arena) {
   Line *line = pushStruct(arena, Line, DEFAULT_ALIGNMENT);
   line->len = 0;
   line->text = pushSize(arena, TEXT_LINE_ALLOCATION_SIZE, DEFAULT_ALIGNMENT);
-  line->max_len = TEXT_LINE_ALLOCATION_SIZE -1;
+  line->max_len = TEXT_LINE_ALLOCATION_SIZE - 1;
   line->prev = NULL;
   line->next = NULL;
   line->texture = NULL;
@@ -152,6 +152,15 @@ void editor_frame_move_cursor_v(EditorFrame *frame, int16_t d,
   }
 }
 
+void editor_frame_invalidate_viewport_textures(EditorFrame *frame) {
+  for (int16_t i = frame->viewport_v.start; i < frame->viewport_v.size; ++i) {
+    if (i == frame->line_count) {
+      break;
+    }
+    line_invalidate_texture(frame->index[i]);
+  }
+}
+
 void editor_frame_move_cursor_h(EditorFrame *frame, int16_t d) {
   assert(frame->cursor.line != NULL);
 
@@ -166,14 +175,7 @@ void editor_frame_move_cursor_h(EditorFrame *frame, int16_t d) {
   frame->cursor.column = column;
   if (column < frame->viewport_h.start ||
       column >= (frame->viewport_h.start + frame->viewport_h.size)) {
-
-
-    for (int16_t i = frame->viewport_v.start; i < frame->viewport_v.size; ++i) {
-      if (i == frame->line_count) {
-        break;
-      }
-      line_invalidate_texture(frame->index[i]);
-    }
+    editor_frame_invalidate_viewport_textures(frame);
   }
 
   editor_frame_update_viewport(frame);
@@ -294,19 +296,21 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
   editor_frame_reindex(frame);
 }
 
-void editor_frame_insert_text(MemoryArena * arena, MemoryArena *transient_arena, EditorFrame *frame, char *text,
+void editor_frame_insert_text(MemoryArena *arena, MemoryArena *transient_arena,
+                              EditorFrame *frame, char *text,
                               int16_t text_size) {
   assert(text_size > 0);
 
   Line *line = frame->cursor.line;
   if (line->max_len < (line->len + text_size)) {
     line->text[line->len] = 0;
-    char* s = pushString(transient_arena, line->text);
+    char *s = pushString(transient_arena, line->text);
 
-    double chunks = ((double)(line->len + text_size + 1)) / (double)TEXT_LINE_ALLOCATION_SIZE;
+    double chunks = ((double)(line->len + text_size + 1)) /
+                    (double)TEXT_LINE_ALLOCATION_SIZE;
     int16_t new_size = ceil(chunks) * TEXT_LINE_ALLOCATION_SIZE;
 
-    line->max_len = new_size -1;
+    line->max_len = new_size - 1;
     line->text = pushSize(arena, new_size, DEFAULT_ALIGNMENT);
     strcpy(line->text, s);
   }
@@ -323,8 +327,8 @@ void editor_frame_insert_text(MemoryArena * arena, MemoryArena *transient_arena,
 }
 
 // TODO rewrite to avoid moving the cursor and such
-int editor_frame_load_file(MemoryArena *arena, MemoryArena* transient_arena, EditorFrame *editor_frame,
-                           char *filename) {
+int editor_frame_load_file(MemoryArena *arena, MemoryArena *transient_arena,
+                           EditorFrame *editor_frame, char *filename) {
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
