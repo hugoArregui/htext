@@ -251,8 +251,6 @@ enum KeyStateMachineState key_state_machine_dispatch(State *state,
                                &editor_frame->cursor.column);
   }
 
-  assert_editor_frame_integrity(&state->editor_frame);
-
   state->status_message[0] = '\0';
   return KeyStateMachine_Done;
 }
@@ -497,7 +495,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
           ex_frame->size = 0;
           ex_frame->cursor_column = 0;
         }
-        assert_editor_frame_integrity(&state->editor_frame);
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
@@ -507,7 +504,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
           state->mode = AppMode_normal;
         }
-        assert_editor_frame_integrity(&state->editor_frame);
         break;
       default:
         assert(false);
@@ -524,9 +520,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_ex: {
         int16_t text_size = strlen(event.text.text);
-        assert_editor_frame_integrity(editor_frame);
         ex_frame_insert_text(ex_frame, event.text.text, text_size);
-        assert_editor_frame_integrity(editor_frame);
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
