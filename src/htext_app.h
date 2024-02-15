@@ -81,33 +81,32 @@ char *pushString(MemoryArena *arena, char *source) {
 }
 
 #define ARENA_DEFAULT_ALIGNMENT 16
-/* static void */
-/* subArena(MemoryArena *result, MemoryArena *arena, size_t size, size_t
- * alignment) */
-/* { */
-/*   result->size = size; */
-/*   result->base = (uint8*)pushSize(arena, size, alignment); */
-/*   result->used = 0; */
-/*   result->tempCount = 0; */
+static void subArena(MemoryArena *result, MemoryArena *arena, size_t size,
+                     size_t alignment) {
+  result->size = size;
+  result->base = (uint8_t *)pushSize(arena, size, alignment);
+  result->used = 0;
+  result->tempCount = 0;
+}
+
+/* inline TemporaryMemory beginTemporaryMemory(MemoryArena *arena) { */
+/*   TemporaryMemory result; */
+/*   result.arena = arena; */
+/*   result.used = arena->used; */
+/*   ++arena->tempCount; */
+/*   return result; */
 /* } */
 
-inline TemporaryMemory beginTemporaryMemory(MemoryArena *arena) {
-  TemporaryMemory result;
-  result.arena = arena;
-  result.used = arena->used;
-  ++arena->tempCount;
-  return result;
-}
+/* inline void endTemporaryMemory(TemporaryMemory temporaryMemory) { */
+/*   MemoryArena *arena = temporaryMemory.arena; */
+/*   assert(arena->used >= temporaryMemory.used); */
+/*   arena->used = temporaryMemory.used; */
+/*   assert(arena->tempCount > 0); */
+/*   arena->tempCount--; */
+/* } */
 
-inline void endTemporaryMemory(TemporaryMemory temporaryMemory) {
-  MemoryArena *arena = temporaryMemory.arena;
-  assert(arena->used >= temporaryMemory.used);
-  arena->used = temporaryMemory.used;
-  assert(arena->tempCount > 0);
-  arena->tempCount--;
-}
-
-inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
+/* inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
+ */
 
 enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count };
 
@@ -152,6 +151,7 @@ typedef struct {
   Viewport viewport_v;
   Viewport viewport_h;
 
+  MemoryArena arena;
   // IMPORTANT: this is not a double link list, only next pointers are valid
   Line *deleted_line;
 } EditorFrame;

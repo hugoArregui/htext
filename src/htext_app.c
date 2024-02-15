@@ -298,8 +298,8 @@ void key_state_machine_add_key(KeyStateMachine *ksm, char c, State *state) {
 int16_t load_file(RendererContext context, char *filename) {
   State *state = context.state;
 
-  int r = editor_frame_load_file(&state->arena, context.transient_arena,
-                                 &state->editor_frame, filename);
+  int r = editor_frame_load_file(context.transient_arena, &state->editor_frame,
+                                 filename);
   if (r < 0) {
     return r;
   }
@@ -441,6 +441,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   const int16_t ex_frame_start_y = modeline_frame_start_y + 1.5 * state->font_h;
   editor_frame->viewport_v.size =
       (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
+  // TODO make this dynamic
   editor_frame->viewport_h.size = 100;
 
   SDL_Event event;
@@ -478,9 +479,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             } else {
               sprintf(state->status_message, "Cannot write to %s", filename);
             }
-          } else if (ex_frame->size == 4 &&
-                     strncmp(ex_frame->text, "clear", 5) == 0) {
-            editor_frame_clear(editor_frame);
+          } else if (ex_frame->size == 5 &&
+                     strncmp(ex_frame->text, "close", 5) == 0) {
+            editor_frame_close(editor_frame);
           } else if (ex_frame->size == 10 &&
                      strncmp(ex_frame->text, "invalidate", 10) == 0) {
             editor_frame_invalidate_viewport_textures(editor_frame);
@@ -498,7 +499,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
         break;
       case AppMode_insert:
         if (event.key.keysym.scancode == SDL_SCANCODE_RETURN) {
-          editor_frame_insert_new_line(&state->arena, editor_frame);
+          editor_frame_insert_new_line(editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_BACKSPACE) {
           editor_frame_remove_char(editor_frame);
         } else if (event.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
@@ -524,8 +525,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       } break;
       case AppMode_insert: {
         int16_t text_size = strlen(event.text.text);
-        editor_frame_insert_text(&state->arena, &transient_arena->arena,
-                                 editor_frame, event.text.text, text_size);
+        editor_frame_insert_text(&transient_arena->arena, editor_frame,
+                                 event.text.text, text_size);
       } break;
       default:
         assert(false);
