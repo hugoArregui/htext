@@ -34,6 +34,6 @@ void ex_frame_remove_char(ExFrame *frame) {
 ExFrame ex_frame_create(MemoryArena *arena) {
   ExFrame ex_frame = (ExFrame){
       .size = 0, .max_size = 200, .cursor_column = 0, .texture = NULL};
-  ex_frame.text = pushSize(arena, ex_frame.max_size, DEFAULT_ALIGMENT);
+  ex_frame.text = pushSize(arena, ex_frame.max_size, DEFAULT_ALIGNMENT);
   return ex_frame;
 }

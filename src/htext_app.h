@@ -22,7 +22,7 @@ typedef struct {
 } TemporaryMemory;
 
 typedef struct {
-  bool isInitialized;
+  bool is_initialized;
   MemoryArena arena;
 } TransientState;
 
@@ -56,7 +56,7 @@ inline static memory_index getArenaRemainingSize(MemoryArena *arena) {
 #define pushArray(arena, count, type, aligment)                                \
   (type *)pushSize(arena, (count) * sizeof(type), aligment)
 
-#define DEFAULT_ALIGMENT 4
+#define DEFAULT_ALIGNMENT 4
 void *pushSize(MemoryArena *arena, size_t size, size_t alignment) {
   size_t originalSize = size;
   size_t alignmentOffset = getAlignmentOffset(arena, alignment);
@@ -73,14 +73,14 @@ void *pushSize(MemoryArena *arena, size_t size, size_t alignment) {
 
 char *pushString(MemoryArena *arena, char *source) {
   uint32_t size = strlen(source) + 1;
-  char *dest = (char *)pushSize(arena, size, DEFAULT_ALIGMENT);
+  char *dest = (char *)pushSize(arena, size, DEFAULT_ALIGNMENT);
   for (uint32_t charIndex = 0; charIndex < size; ++charIndex) {
     dest[charIndex] = source[charIndex];
   }
   return dest;
 }
 
-#define ARENA_DEFAULT_ALIGMENT 16
+#define ARENA_DEFAULT_ALIGNMENT 16
 /* static void */
 /* subArena(MemoryArena *result, MemoryArena *arena, size_t size, size_t
  * alignment) */
@@ -120,8 +120,8 @@ struct Line;
 
 typedef struct Line {
   char *text;
-  int16_t size;
-  int16_t max_size;
+  int16_t len;
+  int16_t max_len;
   struct Line *prev;
   struct Line *next;
 
