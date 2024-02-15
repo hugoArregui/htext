@@ -209,15 +209,18 @@ void editor_frame_delete_line(EditorFrame *frame, Line *line) {
   frame->line_count--;
 }
 
-void editor_frame_clear(EditorFrame *frame) {
+void editor_frame_close(EditorFrame *frame) {
   assert_editor_frame_integrity(frame);
-  while (frame->line->next != NULL) {
-    editor_frame_delete_line(frame, frame->line->next);
-  }
+
+  frame->arena.used = 0;
+
+  /* while (frame->line->next != NULL) { */
+  /*   editor_frame_delete_line(frame, frame->line->next); */
+  /* } */
   editor_frame_cursor_reset(frame);
-  frame->cursor.line->next = NULL;
-  frame->line->len = 0;
   frame->line_count = 1;
+  frame->line = line_create(&frame->arena);
+  frame->cursor.line = frame->line;
 
   assert_editor_frame_integrity(frame);
 }
@@ -254,14 +257,14 @@ void editor_frame_remove_char(EditorFrame *frame) {
   assert_editor_frame_integrity(frame);
 }
 
-void editor_frame_insert_new_line(MemoryArena *arena, EditorFrame *frame) {
+void editor_frame_insert_new_line(EditorFrame *frame) {
   assert_editor_frame_integrity(frame);
   Line *new_line;
   if (frame->deleted_line != NULL) {
     new_line = frame->deleted_line;
     frame->deleted_line = frame->deleted_line->next;
   } else {
-    new_line = line_create(arena);
+    new_line = line_create(&frame->arena);
   }
 
   if (frame->cursor.column < frame->cursor.line->len) {
@@ -303,9 +306,8 @@ void editor_frame_remove_lines(EditorFrame *frame, int16_t n) {
   assert_editor_frame_integrity(frame);
 }
 
-void editor_frame_insert_text(MemoryArena *arena, MemoryArena *transient_arena,
-                              EditorFrame *frame, char *text,
-                              int16_t text_size) {
+void editor_frame_insert_text(MemoryArena *transient_arena, EditorFrame *frame,
+                              char *text, int16_t text_size) {
   assert(text_size > 0);
   assert_editor_frame_integrity(frame);
 
@@ -319,7 +321,7 @@ void editor_frame_insert_text(MemoryArena *arena, MemoryArena *transient_arena,
     int16_t new_size = ceil(chunks) * TEXT_LINE_ALLOCATION_SIZE;
 
     line->max_len = new_size - 1;
-    line->text = pushSize(arena, new_size, DEFAULT_ALIGNMENT);
+    line->text = pushSize(&frame->arena, new_size, DEFAULT_ALIGNMENT);
     strcpy(line->text, s);
   }
 
@@ -336,15 +338,15 @@ void editor_frame_insert_text(MemoryArena *arena, MemoryArena *transient_arena,
 }
 
 // TODO rewrite to avoid moving the cursor and such
-int editor_frame_load_file(MemoryArena *arena, MemoryArena *transient_arena,
-                           EditorFrame *frame, char *filename) {
+int editor_frame_load_file(MemoryArena *transient_arena, EditorFrame *frame,
+                           char *filename) {
   assert_editor_frame_integrity(frame);
   FILE *f = fopen(filename, "r");
   if (!f) {
     return -1;
   }
 
-  editor_frame_clear(frame);
+  editor_frame_close(frame);
   assert_editor_frame_integrity(frame);
   assert(frame->line_count == 1);
 
@@ -352,10 +354,10 @@ int editor_frame_load_file(MemoryArena *arena, MemoryArena *transient_arena,
   int16_t read_size = fread(&c, sizeof(char), 1, f);
   while (read_size > 0) {
     if (c == '\n') {
-      editor_frame_insert_new_line(arena, frame);
+      editor_frame_insert_new_line(frame);
     } else {
       assert(c >= 32);
-      editor_frame_insert_text(arena, transient_arena, frame, &c, 1);
+      editor_frame_insert_text(transient_arena, frame, &c, 1);
     }
     read_size = fread(&c, sizeof(char), 1, f);
   }
@@ -369,13 +371,12 @@ int editor_frame_load_file(MemoryArena *arena, MemoryArena *transient_arena,
 }
 
 EditorFrame editor_frame_create(MemoryArena *arena) {
-  Line *line = line_create(arena);
-  EditorFrame editor_frame =
-      (EditorFrame){.line = line,
-                    .cursor = (Cursor){.line = line, .column = 0},
-                    .line_count = 1,
-                    .viewport_v.start = 0,
-                    .viewport_h.start = 0};
-  editor_frame_reindex(&editor_frame);
-  return editor_frame;
+  EditorFrame frame = (EditorFrame){
+      .line_count = 1, .viewport_v.start = 0, .viewport_h.start = 0};
+  size_t frame_arena_size = arena->size * 0.9;
+  subArena(&frame.arena, arena, frame_arena_size, ARENA_DEFAULT_ALIGNMENT);
+  Line *line = line_create(&frame.arena);
+  frame.cursor = (Cursor){.line = line, .column = 0}, frame.line = line;
+  editor_frame_reindex(&frame);
+  return frame;
 }

@@ -20,16 +20,17 @@ int main(void) {
                     .cursor = (Cursor){.line = line, .column = 0},
                     .line_count = 1};
 
-  line_insert_text(frame.cursor.line, &frame.cursor.column, "hello world", 11);
+  editor_frame_insert_text(frame.cursor.line, &frame.cursor.column,
+                           "hello world", 11);
   assert(frame.line == frame.cursor.line);
   assert(frame.cursor.column == 11);
   assert(frame.line->prev == NULL);
-  assert(frame.line->size == 11);
+  assert(frame.line->len == 11);
 
   //----
   frame.cursor.column = 5;
-  line_insert_text(frame.cursor.line, &frame.cursor.column, ",", 1);
-  assert(frame.line->size == 12);
+  editor_frame_insert_text(frame.cursor.line, &frame.cursor.column, ",", 1);
+  assert(frame.line->len == 12);
   assert(frame.line->prev == NULL);
   assert(line_eq(frame.line, "hello, world"));
   assert(frame.cursor.column == 6);
@@ -48,12 +49,12 @@ int main(void) {
     "hello "
     "world" cursor.column = 0
   */
-  assert(frame.line->size == 6);
+  assert(frame.line->len == 6);
   assert(frame.line->prev == NULL);
   assert(frame.line->next == frame.cursor.line);
   assert(frame.line->next->prev == frame.line);
   assert(frame.cursor.line == frame.line->next);
-  assert(frame.cursor.line->size == 5);
+  assert(frame.cursor.line->len == 5);
   assert(line_eq(frame.line, "hello "));
   assert(line_eq(frame.cursor.line, "world"));
   assert(frame.cursor.column == 0);
@@ -66,7 +67,7 @@ int main(void) {
     ""
     "world" cursor.column = 0
   */
-  assert(frame.line->size == 6);
+  assert(frame.line->len == 6);
   assert(frame.line->next->size == 0);
   assert(frame.line->next->next->size == 5);
   assert(frame.cursor.column == 0);
@@ -83,7 +84,7 @@ int main(void) {
     "hello "
     "world" cursor.column = 0
   */
-  assert(frame.line->size == 6);
+  assert(frame.line->len == 6);
   assert(frame.line->next->size == 5);
   assert(frame.cursor.line == frame.line->next);
   assert(frame.cursor.column == 0);
@@ -104,7 +105,7 @@ int main(void) {
     "world"
     "" cursor.column = 0
   */
-  assert(frame.line->size == 6);
+  assert(frame.line->len == 6);
   assert(frame.line->next->size == 5);
   assert(frame.line->next->next->size == 0);
   assert(deleted_line == frame.cursor.line); // reusing deleted line
