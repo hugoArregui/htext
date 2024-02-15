@@ -88,7 +88,7 @@ void editor_frame_render_line(RendererContext context, Line *line,
       }
       char *str_to_render = pushSize(context.transient_arena,
                                      str_to_render_size + 1, DEFAULT_ALIGNMENT);
-      strncpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
+      charcpy(str_to_render, line->text + viewport_h.start, str_to_render_size);
       str_to_render[str_to_render_size] = '\0';
 
       line->texture =
@@ -304,8 +304,7 @@ int16_t load_file(RendererContext context, char *filename) {
     return r;
   }
 
-  // TODO(leak): reuse string if already is reserved
-  state->filename = pushString(&state->arena, filename);
+  strcpy(state->filename, filename);
 
   SDL_Color color = {UNHEX(MODELINE_FONT_COLOR)};
 
@@ -376,7 +375,7 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
   state->appModeTextures[AppMode_insert] =
       cached_texture_create(renderer, state->font, "INSERT | ", modeColor);
 
-  state->filename = NULL;
+  state->filename[0] = 0;
   state->status_message[0] = '\0';
 
   key_state_machine_reset(&state->normal_ksm);
@@ -481,6 +480,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
             }
           } else if (ex_frame->size == 5 &&
                      strncmp(ex_frame->text, "close", 5) == 0) {
+            state->filename[0] = 0;
             editor_frame_close(editor_frame);
           } else if (ex_frame->size == 10 &&
                      strncmp(ex_frame->text, "invalidate", 10) == 0) {
@@ -611,7 +611,7 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
 
     dest.x += dest.w;
 
-    if (state->filename != NULL) {
+    if (strlen(state->filename) > 0) {
       dest.w = state->filename_texture_width;
       SDL_RenderCopy(buffer->renderer, state->filename_texture, NULL, &dest);
       dest.x += dest.w + state->font_h;

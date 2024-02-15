@@ -29,7 +29,7 @@ build-for-playback:
 
 test: clean
 	mkdir -p build/
-	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c $(LIBS)
+	$(CC) $(CFLAGS) $(DEBUG) -o build/tests src/tests.c $(LIBS) -lm
 	./build/tests
 
 format:

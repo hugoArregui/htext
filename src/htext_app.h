@@ -1,3 +1,5 @@
+#include <string.h>
+#include <sys/types.h>
 #ifndef __H_TEXT_APP
 
 #include "htext_platform.h"
@@ -198,6 +200,7 @@ typedef struct {
   MemoryArena arena;
 
   char status_message[200];
+  char filename[200];
 
   EditorFrame editor_frame;
   ExFrame ex_frame;
@@ -211,7 +214,6 @@ typedef struct {
   int32_t line_number_texture_width;
   SDL_Texture *line_number_texture_cache[LINE_NUMBER_TEXTURE_CACHE_SIZE];
 
-  char *filename;
   SDL_Texture *filename_texture;
   int32_t filename_texture_width;
 
@@ -226,6 +228,10 @@ typedef struct {
   SDL_Renderer *renderer;
   MemoryArena *transient_arena;
 } RendererContext;
+
+static inline void charcpy(char *dest, char *source, u_long size) {
+  memcpy(dest, source, size);
+}
 
 #define __H_TEXT_APP
 #endif
