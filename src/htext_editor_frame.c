@@ -214,9 +214,11 @@ void editor_frame_close(EditorFrame *frame) {
 
   frame->arena.used = 0;
 
-  /* while (frame->line->next != NULL) { */
-  /*   editor_frame_delete_line(frame, frame->line->next); */
-  /* } */
+  Line* line = frame->line;
+  while (line != NULL) {
+    line_invalidate_texture(line);
+    line = line->next;
+  }
   editor_frame_cursor_reset(frame);
   frame->line_count = 1;
   frame->line = line_create(&frame->arena);
@@ -237,7 +239,7 @@ void editor_frame_remove_char(EditorFrame *frame) {
 
       if (line_to_remove->len > 0) {
         // we need to join line_to_remove with prev cursor line
-        strncpy(frame->cursor.line->text + frame->cursor.line->len,
+        charcpy(frame->cursor.line->text + frame->cursor.line->len,
                 line_to_remove->text, line_to_remove->len);
         frame->cursor.line->len += line_to_remove->len;
       }
@@ -246,7 +248,7 @@ void editor_frame_remove_char(EditorFrame *frame) {
     }
   } else {
     assert(frame->cursor.column <= frame->cursor.line->len);
-    strncpy(frame->cursor.line->text + frame->cursor.column - 1,
+    charcpy(frame->cursor.line->text + frame->cursor.column - 1,
             frame->cursor.line->text + frame->cursor.column,
             frame->cursor.line->len - frame->cursor.column);
     frame->cursor.line->len--;
@@ -269,7 +271,7 @@ void editor_frame_insert_new_line(EditorFrame *frame) {
 
   if (frame->cursor.column < frame->cursor.line->len) {
     new_line->len = frame->cursor.line->len - frame->cursor.column;
-    strncpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
+    charcpy(new_line->text, frame->cursor.line->text + frame->cursor.column,
             new_line->len);
     line_invalidate_texture(frame->cursor.line);
     frame->cursor.line->len = frame->cursor.column;
@@ -328,12 +330,14 @@ void editor_frame_insert_text(MemoryArena *transient_arena, EditorFrame *frame,
   assert(line->max_len >= (line->len + text_size));
 
   int16_t column = frame->cursor.column;
-  strncpy(line->text + column + text_size, line->text + column,
+  charcpy(line->text + column + text_size, line->text + column,
           line->len - column);
-  strncpy(line->text + column, text, text_size);
+  charcpy(line->text + column, text, text_size);
   line_invalidate_texture(line);
   line->len += text_size;
+  frame->line->text[frame->line->len] = 0;
   frame->cursor.column += text_size;
+
   assert_editor_frame_integrity(frame);
 }
 

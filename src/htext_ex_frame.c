@@ -10,10 +10,10 @@ void ex_frame_invalidate_texture(ExFrame *frame) {
 void ex_frame_insert_text(ExFrame *frame, char *text, int16_t text_size) {
   assert(text_size > 0);
   assert(frame->size + text_size < frame->max_size);
-  strncpy(frame->text + frame->cursor_column + text_size,
+  charcpy(frame->text + frame->cursor_column + text_size,
           frame->text + frame->cursor_column,
           frame->size - frame->cursor_column);
-  strncpy(frame->text + frame->cursor_column, text, text_size);
+  charcpy(frame->text + frame->cursor_column, text, text_size);
   ex_frame_invalidate_texture(frame);
   frame->size += text_size;
   frame->cursor_column += text_size;
@@ -22,7 +22,7 @@ void ex_frame_insert_text(ExFrame *frame, char *text, int16_t text_size) {
 void ex_frame_remove_char(ExFrame *frame) {
   if (frame->cursor_column > 0) {
     assert(frame->cursor_column <= frame->size);
-    strncpy(frame->text + frame->cursor_column,
+    charcpy(frame->text + frame->cursor_column,
             frame->text + frame->cursor_column + 1,
             frame->size - frame->cursor_column);
     frame->size--;
