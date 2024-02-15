@@ -214,7 +214,7 @@ void editor_frame_close(EditorFrame *frame) {
 
   frame->arena.used = 0;
 
-  Line* line = frame->line;
+  Line *line = frame->line;
   while (line != NULL) {
     line_invalidate_texture(line);
     line = line->next;
