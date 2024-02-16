@@ -33,14 +33,14 @@ typedef double real64;
 /* #define DEBUG_PLAYBACK PLAYBACK_PLAYING */
 
 typedef struct {
-  uint64_t totalSize;
-  void *gameMemoryBlock;
+  uint64_t total_size;
+  void *memory_block;
 } PlatformState;
 
 typedef struct {
   SDL_Renderer *renderer;
 #ifdef DEBUG_WINDOW
-  SDL_Renderer *debugRenderer;
+  SDL_Renderer *debug_renderer;
 #endif
 
   int width;
@@ -48,17 +48,16 @@ typedef struct {
 } SdlOffscreenBuffer;
 
 typedef struct {
-  uint64_t permanentStorageSize;
-  void *permanentStorage; // NOTE(casey): REQUIRED to be cleared to zero at
-                          // startup
+  uint64_t permanent_storage_size;
+  void *permanent_storage; // NOTE(casey): REQUIRED to be cleared to zero at
+                           // startup
 
-  uint64_t transientStorageSize;
-  void *transientStorage; // NOTE(casey): REQUIRED to be cleared to zero at
-                          // startup
+  uint64_t transient_storage_size;
+  void *transient_storage; // NOTE(casey): REQUIRED to be cleared to zero at
+                           // startup
 } Memory;
 
 typedef struct {
-  real32 dtForFrame;
   bool executableReloaded;
   int keypressed;
 

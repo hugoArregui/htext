@@ -60,25 +60,25 @@ int main(void) {
   uint64_t permanentStorageSize = Megabytes(256);
   uint64_t transientStorageSize = Gigabytes(3);
   PlatformState platformState = {};
-  platformState.totalSize = permanentStorageSize + transientStorageSize;
+  platformState.total_size = permanentStorageSize + transientStorageSize;
 
   void *baseAddress = (void *)(0);
   // NOTE: MAP_ANONYMOUS content initialized to zero
-  platformState.gameMemoryBlock =
-      mmap(baseAddress, platformState.totalSize, PROT_READ | PROT_WRITE,
+  platformState.memory_block =
+      mmap(baseAddress, platformState.total_size, PROT_READ | PROT_WRITE,
            MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 
-  if (platformState.gameMemoryBlock == MAP_FAILED) {
+  if (platformState.memory_block == MAP_FAILED) {
     printf("failed to reserve memory %s\n", strerror(errno));
     return -1;
   }
 
   Memory memory = {};
-  memory.permanentStorageSize = permanentStorageSize;
-  memory.transientStorageSize = transientStorageSize;
-  memory.permanentStorage = platformState.gameMemoryBlock;
-  memory.transientStorage =
-      ((uint8_t *)memory.permanentStorage + memory.permanentStorageSize);
+  memory.permanent_storage_size = permanentStorageSize;
+  memory.transient_storage_size = transientStorageSize;
+  memory.permanent_storage = platformState.memory_block;
+  memory.transient_storage =
+      ((uint8_t *)memory.permanent_storage + memory.permanent_storage_size);
 
   int width = 1920;
   int height = 1080;
@@ -119,7 +119,6 @@ int main(void) {
 #endif
 
   Input input = {};
-  input.dtForFrame = targetSecondsPerFrame;
 
 #if DEBUG_PLAYBACK == PLAYBACK_RECORDING
   input.playbackFile = fopen("playback", "w");
@@ -163,7 +162,7 @@ int main(void) {
       buffer.renderer = renderer;
 
 #if DEBUG_WINDOW
-      buffer.debugRenderer = debugRenderer;
+      buffer.debug_renderer = debugRenderer;
 #endif
 
       SDL_GetWindowSize(window, &buffer.width, &buffer.height);
@@ -217,6 +216,6 @@ int main(void) {
 
   SDL_Quit();
 
-  munmap(platformState.gameMemoryBlock, platformState.totalSize);
+  munmap(platformState.memory_block, platformState.total_size);
   return 0;
 }

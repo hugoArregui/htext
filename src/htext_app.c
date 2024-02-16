@@ -361,8 +361,8 @@ void state_create(State *state, SDL_Renderer *renderer, Memory *memory) {
     SDL_FreeSurface(surface);
   }
 
-  initializeArena(&state->arena, memory->permanentStorageSize - sizeof(State),
-                  (uint8_t *)memory->permanentStorage + sizeof(State));
+  initializeArena(&state->arena, memory->permanent_storage_size - sizeof(State),
+                  (uint8_t *)memory->permanent_storage + sizeof(State));
 
   state->editor_frame = editor_frame_create(&state->arena);
   state->ex_frame = ex_frame_create(&state->arena);
@@ -391,19 +391,18 @@ void state_destroy(State *state) {
 }
 
 extern UPDATE_AND_RENDER(UpdateAndRender) {
-  assert(sizeof(State) <= memory->permanentStorageSize);
+  assert(sizeof(State) <= memory->permanent_storage_size);
 
 #if DEBUG_WINDOW
-  uint32_t debugBackgroundColor = 0xFFFFFFFF;
   uint32_t debugFontColor = 0x00000000;
-  SDL_SetRenderDrawColor(buffer->debugRenderer, UNHEX(debugBackgroundColor));
-  SDL_RenderClear(buffer->debugRenderer);
+  SDL_SetRenderDrawColor(buffer->debug_renderer, UNHEX(0xFFFFFFFF));
+  SDL_RenderClear(buffer->debug_renderer);
 #endif
 
   SDL_ccode(SDL_SetRenderDrawColor(buffer->renderer, UNHEX(BG_COLOR)));
   SDL_ccode(SDL_RenderClear(buffer->renderer));
 
-  State *state = (State *)memory->permanentStorage;
+  State *state = (State *)memory->permanent_storage;
 
   if (!state->isInitialized) {
     state_create(state, buffer->renderer, memory);
@@ -411,12 +410,12 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
   }
 
   // NOTE(casey): Transient initialization
-  assert(sizeof(TransientState) <= memory->transientStorageSize);
-  TransientState *transient_arena = (TransientState *)memory->transientStorage;
+  assert(sizeof(TransientState) <= memory->transient_storage_size);
+  TransientState *transient_arena = (TransientState *)memory->transient_storage;
   if (!transient_arena->is_initialized) {
     initializeArena(&transient_arena->arena,
-                    memory->transientStorageSize - sizeof(TransientState),
-                    (uint8_t *)memory->transientStorage +
+                    memory->transient_storage_size - sizeof(TransientState),
+                    (uint8_t *)memory->transient_storage +
                         sizeof(TransientState));
 
     transient_arena->is_initialized = true;
@@ -677,8 +676,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       sprintf(text, "Editor frame cursor column: %d",
               editor_frame->cursor.column);
       SDL_Texture *texture = texture_from_text(
-          buffer->debugRenderer, state->font, text, color, &dest.w);
-      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+          buffer->debug_renderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debug_renderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
       dest.y += state->font_h;
     }
@@ -687,18 +686,18 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       sprintf(text, "Editor frame cursor line number: %d",
               editor_frame->cursor.line_num);
       SDL_Texture *texture = texture_from_text(
-          buffer->debugRenderer, state->font, text, color, &dest.w);
-      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+          buffer->debug_renderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debug_renderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
       dest.y += state->font_h;
     }
 
     {
       sprintf(text, "Editor frame viewport start: %d, size:%d",
-              editor_frame->viewport_v_start, editor_frame->viewport_v_size);
+              editor_frame->viewport_v.start, editor_frame->viewport_v.size);
       SDL_Texture *texture = texture_from_text(
-          buffer->debugRenderer, state->font, text, color, &dest.w);
-      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+          buffer->debug_renderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debug_renderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
       dest.y += state->font_h;
     }
@@ -708,8 +707,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     {
       sprintf(text, "Ex frame cursor column: %d", ex_frame->cursor_column);
       SDL_Texture *texture = texture_from_text(
-          buffer->debugRenderer, state->font, text, color, &dest.w);
-      SDL_RenderCopy(buffer->debugRenderer, texture, NULL, &dest);
+          buffer->debug_renderer, state->font, text, color, &dest.w);
+      SDL_RenderCopy(buffer->debug_renderer, texture, NULL, &dest);
       SDL_DestroyTexture(texture);
       dest.y += state->font_h;
     }

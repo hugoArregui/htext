@@ -118,9 +118,6 @@ void editor_frame_update_viewport(EditorFrame *frame) {
 
   if (frame->viewport_h.start < 0) {
     frame->viewport_h.start = 0;
-    // TODO
-    /* } else if (frame->viewport_h.start >= frame->viewport_h.size) { */
-    /*   frame->viewport_h.start = frame->viewport_h.size - 1; */
   }
 }
 
@@ -316,7 +313,7 @@ void editor_frame_insert_text(MemoryArena *transient_arena, EditorFrame *frame,
   Line *line = frame->cursor.line;
   if (line->max_len < (line->len + text_size)) {
     line->text[line->len] = 0;
-    char *s = pushString(transient_arena, line->text);
+    char *s = push_string(transient_arena, line->text);
 
     double chunks = ((double)(line->len + text_size + 1)) /
                     (double)TEXT_LINE_ALLOCATION_SIZE;
@@ -378,7 +375,7 @@ EditorFrame editor_frame_create(MemoryArena *arena) {
   EditorFrame frame = (EditorFrame){
       .line_count = 1, .viewport_v.start = 0, .viewport_h.start = 0};
   size_t frame_arena_size = arena->size * 0.9;
-  subArena(&frame.arena, arena, frame_arena_size, ARENA_DEFAULT_ALIGNMENT);
+  sub_arena(&frame.arena, arena, frame_arena_size, ARENA_DEFAULT_ALIGNMENT);
   Line *line = line_create(&frame.arena);
   frame.cursor = (Cursor){.line = line, .column = 0}, frame.line = line;
   editor_frame_reindex(&frame);
