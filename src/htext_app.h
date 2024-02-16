@@ -73,7 +73,7 @@ void *pushSize(MemoryArena *arena, size_t size, size_t alignment) {
   return result;
 }
 
-char *pushString(MemoryArena *arena, char *source) {
+char *push_string(MemoryArena *arena, char *source) {
   uint32_t size = strlen(source) + 1;
   char *dest = (char *)pushSize(arena, size, DEFAULT_ALIGNMENT);
   for (uint32_t charIndex = 0; charIndex < size; ++charIndex) {
@@ -83,8 +83,8 @@ char *pushString(MemoryArena *arena, char *source) {
 }
 
 #define ARENA_DEFAULT_ALIGNMENT 16
-static void subArena(MemoryArena *result, MemoryArena *arena, size_t size,
-                     size_t alignment) {
+static void sub_arena(MemoryArena *result, MemoryArena *arena, size_t size,
+                      size_t alignment) {
   result->size = size;
   result->base = (uint8_t *)pushSize(arena, size, alignment);
   result->used = 0;
