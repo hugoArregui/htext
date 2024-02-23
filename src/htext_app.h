@@ -91,24 +91,23 @@ static void sub_arena(MemoryArena *result, MemoryArena *arena, size_t size,
   result->tempCount = 0;
 }
 
-/* inline TemporaryMemory beginTemporaryMemory(MemoryArena *arena) { */
-/*   TemporaryMemory result; */
-/*   result.arena = arena; */
-/*   result.used = arena->used; */
-/*   ++arena->tempCount; */
-/*   return result; */
-/* } */
+TemporaryMemory beginTemporaryMemory(MemoryArena *arena) {
+  TemporaryMemory result;
+  result.arena = arena;
+  result.used = arena->used;
+  ++arena->tempCount;
+  return result;
+}
 
-/* inline void endTemporaryMemory(TemporaryMemory temporaryMemory) { */
-/*   MemoryArena *arena = temporaryMemory.arena; */
-/*   assert(arena->used >= temporaryMemory.used); */
-/*   arena->used = temporaryMemory.used; */
-/*   assert(arena->tempCount > 0); */
-/*   arena->tempCount--; */
-/* } */
+void endTemporaryMemory(TemporaryMemory temporaryMemory) {
+  MemoryArena *arena = temporaryMemory.arena;
+  assert(arena->used >= temporaryMemory.used);
+  arena->used = temporaryMemory.used;
+  assert(arena->tempCount > 0);
+  arena->tempCount--;
+}
 
-/* inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
- */
+inline void checkArena(MemoryArena *arena) { assert(arena->tempCount == 0); }
 
 enum AppMode { AppMode_normal, AppMode_ex, AppMode_insert, AppMode_count };
 

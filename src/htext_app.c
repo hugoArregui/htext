@@ -429,7 +429,6 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       (RendererContext){.state = state,
                         .transient_arena = &transient_arena->arena,
                         .renderer = buffer->renderer};
-  ;
 
   EditorFrame *editor_frame = &state->editor_frame;
   ExFrame *ex_frame = &state->ex_frame;
@@ -441,6 +440,8 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
       (modeline_frame_start_y - editor_frame_start_y) / state->font_h;
   // TODO make this dynamic
   editor_frame->viewport_h.size = 100;
+
+  TemporaryMemory tmp_memory = beginTemporaryMemory(&transient_arena->arena);
 
   SDL_Event event;
   while (poll_event(input, &event)) {
@@ -714,6 +715,9 @@ extern UPDATE_AND_RENDER(UpdateAndRender) {
     }
   }
 #endif
+
+
+  endTemporaryMemory(tmp_memory);
 
   return 0;
 }
